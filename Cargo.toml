@@ -1,0 +1,13 @@
+[package]
+name = "anchors"
+version = "0.1.0"
+authors = ["Robert Lord <robert@lord.io>"]
+edition = "2018"
+description = "async incremental computations"
+license = "MIT"
+documentation = "https://docs.rs/anchors"
+repository = "https://github.com/lord/anchors"
+
+[dependencies]
+slotmap = { version = "0.4.0", features = ["unstable"] }
+petgraph = "0.5.1"
