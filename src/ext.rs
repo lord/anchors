@@ -4,6 +4,7 @@ use std::panic::Location;
 mod map;
 mod refmap;
 mod then;
+mod cutoff;
 
 pub trait AnchorExt<E: Engine>: Sized {
     type Target;
@@ -27,6 +28,15 @@ pub trait AnchorExt<E: Engine>: Sized {
         F: 'static,
         Out: 'static,
         then::Then<Self::Target, Out, F, E>: AnchorInner<E, Output = Out>;
+
+    fn cutoff<F, Out>(self, _f: F) -> Anchor<Out, E>
+    where
+        Out: 'static,
+        F: 'static,
+        cutoff::Cutoff<Self::Target, F>: AnchorInner<E, Output = Out>,
+    {
+        unimplemented!()
+    }
 }
 
 pub trait AnchorSplit<E: Engine>: Sized {
@@ -79,6 +89,20 @@ where
         refmap::RefMap<Self::Target, F>: AnchorInner<E, Output = Out>,
     {
         E::mount(refmap::RefMap {
+            anchors: (self.clone(),),
+            f,
+            location: Location::caller(),
+        })
+    }
+
+    #[track_caller]
+    fn cutoff<F, Out>(self, f: F) -> Anchor<Out, E>
+    where
+        Out: 'static,
+        F: 'static,
+        cutoff::Cutoff<Self::Target, F>: AnchorInner<E, Output = Out>,
+    {
+        E::mount(cutoff::Cutoff {
             anchors: (self.clone(),),
             f,
             location: Location::caller(),
