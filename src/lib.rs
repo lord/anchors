@@ -99,6 +99,16 @@ mod test {
     use crate::ext::{AnchorExt, AnchorSplit};
 
     #[test]
+    fn test_refmap_simple() {
+        let mut engine = crate::singlethread::Engine::new();
+        let (v, _) = crate::var::Var::new(("hello".to_string(), "world".to_string()));
+        let a = v.refmap(|(a, _)| a);
+        let b = v.refmap(|(_, b)| b);
+        assert_eq!(engine.get(&a), "hello".to_string());
+        assert_eq!(engine.get(&b), "world".to_string());
+    }
+
+    #[test]
     fn test_split_simple() {
         let mut engine = crate::singlethread::Engine::new();
         let (v, _) = crate::var::Var::new((1usize, 2usize, 3usize));

@@ -13,11 +13,20 @@ pub trait AnchorExt<E: Engine>: Sized {
         F: 'static,
         map::Map<Self::Target, F, Out>: AnchorInner<E, Output = Out>;
 
+    fn refmap<F, Out>(self, _f: F) -> Anchor<Out, E>
+    where
+        Out: 'static,
+        F: 'static,
+        refmap::RefMap<Self::Target, F>: AnchorInner<E, Output = Out> {
+        unimplemented!()
+    }
+
     fn then<F, Out>(self, f: F) -> Anchor<Out, E>
     where
         F: 'static,
         Out: 'static,
         then::Then<Self::Target, Out, F, E>: AnchorInner<E, Output = Out>;
+
 }
 
 pub trait AnchorSplit<E: Engine>: Sized {
@@ -58,6 +67,20 @@ where
             anchors: (self.clone(),),
             f,
             f_anchor: None,
+            location: Location::caller(),
+        })
+    }
+
+    #[track_caller]
+    fn refmap<F, Out>(self, f: F) -> Anchor<Out, E>
+    where
+        Out: 'static,
+        F: 'static,
+        refmap::RefMap<Self::Target, F>: AnchorInner<E, Output = Out>
+    {
+        E::mount(refmap::RefMap {
+            anchors: (self.clone(),),
+            f,
             location: Location::caller(),
         })
     }

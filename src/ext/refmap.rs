@@ -8,7 +8,7 @@ pub struct RefMap<A, F> {
     pub(super) location: &'static Location<'static>,
 }
 
-impl <F, In: 'static, Out: 'static, E> AnchorInner<E> for RefMap<Anchor<In, E>, F>
+impl <F, In: 'static, Out: 'static, E> AnchorInner<E> for RefMap<(Anchor<In, E>,), F>
 where
     E: Engine,
     F: for <'any> Fn(&'any In) -> &'any Out,
@@ -24,7 +24,7 @@ where
     ) -> Poll<bool> {
         let mut found_pending = false;
 
-        if ctx.request(&self.anchors, true).is_pending() {
+        if ctx.request(&self.anchors.0, true).is_pending() {
             found_pending = true;
         }
 
@@ -43,7 +43,7 @@ where
     where
         'slf: 'out,
     {
-        let val = ctx.get(&self.anchors);
+        let val = ctx.get(&self.anchors.0);
         (self.f)(val)
     }
 
