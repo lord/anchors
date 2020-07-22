@@ -3,6 +3,7 @@ use std::panic::Location;
 
 mod map;
 mod then;
+mod refmap;
 
 pub trait AnchorExt<E: Engine>: Sized {
     type Target;
