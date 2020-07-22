@@ -3,6 +3,7 @@ use std::panic::Location;
 
 mod map;
 mod then;
+mod refmap;
 
 pub trait AnchorExt<E: Engine>: Sized {
     type Target;
@@ -12,11 +13,20 @@ pub trait AnchorExt<E: Engine>: Sized {
         F: 'static,
         map::Map<Self::Target, F, Out>: AnchorInner<E, Output = Out>;
 
+    fn refmap<F, Out>(self, _f: F) -> Anchor<Out, E>
+    where
+        Out: 'static,
+        F: 'static,
+        refmap::RefMap<Self::Target, F>: AnchorInner<E, Output = Out> {
+        unimplemented!()
+    }
+
     fn then<F, Out>(self, f: F) -> Anchor<Out, E>
     where
         F: 'static,
         Out: 'static,
         then::Then<Self::Target, Out, F, E>: AnchorInner<E, Output = Out>;
+
 }
 
 pub trait AnchorSplit<E: Engine>: Sized {
@@ -60,6 +70,20 @@ where
             location: Location::caller(),
         })
     }
+
+    #[track_caller]
+    fn refmap<F, Out>(self, f: F) -> Anchor<Out, E>
+    where
+        Out: 'static,
+        F: 'static,
+        refmap::RefMap<Self::Target, F>: AnchorInner<E, Output = Out>
+    {
+        E::mount(refmap::RefMap {
+            anchors: (self.clone(),),
+            f,
+            location: Location::caller(),
+        })
+    }
 }
 
 macro_rules! impl_tuple_ext {
@@ -75,7 +99,7 @@ macro_rules! impl_tuple_ext {
 
             fn split(&self) -> Self::Target {
                 ($(
-                    self.map(|v| v.$num.clone()),
+                    self.refmap(|v| &v.$num),
                 )+)
             }
         }

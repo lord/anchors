@@ -98,6 +98,21 @@ pub trait AnchorInner<E: Engine + ?Sized> {
 mod test {
     use crate::ext::{AnchorExt, AnchorSplit};
 
+    #[derive(PartialEq, Debug)]
+    struct NoClone(usize);
+
+    #[test]
+    fn test_refmap_simple() {
+        let mut engine = crate::singlethread::Engine::new();
+        let (v, _) = crate::var::Var::new((NoClone(1), NoClone(2)));
+        let a = v.refmap(|(a, _)| a);
+        let b = v.refmap(|(_, b)| b);
+        let a_correct = a.map(|a| a == &NoClone(1));
+        let b_correct = b.map(|b| b == &NoClone(2));
+        assert!(engine.get(&a_correct));
+        assert!(engine.get(&b_correct));
+    }
+
     #[test]
     fn test_split_simple() {
         let mut engine = crate::singlethread::Engine::new();
