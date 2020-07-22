@@ -8,20 +8,17 @@ pub struct RefMap<A, F> {
     pub(super) location: &'static Location<'static>,
 }
 
-impl <F, In: 'static, Out: 'static, E> AnchorInner<E> for RefMap<(Anchor<In, E>,), F>
+impl<F, In: 'static, Out: 'static, E> AnchorInner<E> for RefMap<(Anchor<In, E>,), F>
 where
     E: Engine,
-    F: for <'any> Fn(&'any In) -> &'any Out,
+    F: for<'any> Fn(&'any In) -> &'any Out,
 {
     type Output = Out;
 
     fn dirty(&mut self, _edge: &E::AnchorData) {
         // noop
     }
-    fn poll_updated<G: UpdateContext<Engine=E>>(
-        &mut self,
-        ctx: &mut G,
-    ) -> Poll<bool> {
+    fn poll_updated<G: UpdateContext<Engine = E>>(&mut self, ctx: &mut G) -> Poll<bool> {
         let mut found_pending = false;
 
         if ctx.request(&self.anchors.0, true).is_pending() {
@@ -36,7 +33,7 @@ where
         Poll::Ready(true)
     }
 
-    fn output<'slf, 'out, G: OutputContext<'out, Engine=E>>(
+    fn output<'slf, 'out, G: OutputContext<'out, Engine = E>>(
         &'slf self,
         ctx: &mut G,
     ) -> &'out Self::Output
