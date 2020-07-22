@@ -21,6 +21,10 @@ struct Node<T: Eq + Copy + Debug + Key + Ord> {
     height: usize,
     /// Used when setting heights to detect cycles
     visited: bool,
+
+    /// Indicates if a node was either marked dirty manually, or if an inbound edge was set to dirty.
+    /// Can be reset back to clean with mark_clean.
+    dirty: bool,
 }
 impl<T: Eq + Copy + Debug + Key + Ord> Default for Node<T> {
     fn default() -> Self {
@@ -29,6 +33,7 @@ impl<T: Eq + Copy + Debug + Key + Ord> Default for Node<T> {
             children: Vec::new(),
             height: 0,
             visited: false,
+            dirty: true,
         }
     }
 }
@@ -57,6 +62,11 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
     }
 
     pub fn set_edge(&mut self, from: T, to: T, state: EdgeState) -> Result<(), Vec<T>> {
+        if state == EdgeState::Dirty {
+            if let Some(node) = self.nodes.get_mut(to) {
+                node.dirty = true;
+            }
+        }
         let is_necessary = match state {
             EdgeState::Dirty => {
                 self.nodes.get_mut(from).map(|v| {
@@ -116,7 +126,17 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         self.nodes.remove(node_id);
     }
 
-    #[allow(dead_code)]
+    pub fn mark_dirty(&mut self, node_id: T) {
+        if let Some(node) = self.nodes.get_mut(node_id) {
+            node.dirty = true;
+        }
+    }
+
+    pub fn mark_clean(&mut self, node_id: T) {
+        let node = self.get_mut_or_default(node_id);
+        node.dirty = false;
+    }
+
     pub fn necessary_parents(&self, node_id: T) -> Vec<T> {
         self.get_parents(node_id, true)
     }
@@ -134,6 +154,7 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         node.parents.iter().map(|(v, _)| v.clone()).collect()
     }
 
+    #[allow(dead_code)]
     pub fn necessary_children(&self, node_id: T) -> Vec<T> {
         self.get_children(node_id, true)
     }
@@ -144,7 +165,14 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
     }
 
     pub fn is_necessary(&self, node_id: T) -> bool {
-        self.necessary_children(node_id).len() > 0
+        self.necessary_parents(node_id).len() > 0
+    }
+
+    pub fn is_dirty(&self, node_id: T) -> bool {
+        self.nodes
+            .get(node_id)
+            .map(|node| node.dirty)
+            .unwrap_or(true)
     }
 
     pub fn height(&self, node_id: T) -> usize {
@@ -256,8 +284,8 @@ mod test {
         assert_eq!(vec![k(1)], graph.necessary_children(k(2)));
         assert_eq!(empty, graph.clean_parents(k(2)));
         assert_eq!(empty, graph.clean_children(k(2)));
-        assert_eq!(false, graph.is_necessary(k(1)));
-        assert_eq!(true, graph.is_necessary(k(2)));
+        assert_eq!(true, graph.is_necessary(k(1)));
+        assert_eq!(false, graph.is_necessary(k(2)));
 
         graph.set_edge(k(1), k(2), EdgeState::Dirty).unwrap();
 
@@ -343,5 +371,19 @@ mod test {
         graph.set_edge(k(10), k(21), EdgeState::Necessary).unwrap();
         graph.set_edge(k(21), k(30), EdgeState::Necessary).unwrap();
         graph.set_edge(k(2), k(10), EdgeState::Necessary).unwrap();
+    }
+
+    #[test]
+    fn dirty_calculated_correctly() {
+        let mut graph = MetadataGraph::<DefaultKey>::new();
+
+        assert_eq!(true, graph.is_dirty(k(1)));
+        graph.mark_clean(k(1));
+        graph.mark_clean(k(2));
+        assert_eq!(false, graph.is_dirty(k(1)));
+        assert_eq!(false, graph.is_dirty(k(2)));
+        graph.set_edge(k(2), k(1), EdgeState::Dirty).unwrap();
+        assert_eq!(true, graph.is_dirty(k(1)));
+        assert_eq!(false, graph.is_dirty(k(2)));
     }
 }

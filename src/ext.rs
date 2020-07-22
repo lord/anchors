@@ -1,9 +1,10 @@
 use super::{Anchor, AnchorInner, Engine};
 use std::panic::Location;
 
+mod cutoff;
 mod map;
-mod then;
 mod refmap;
+mod then;
 
 pub trait AnchorExt<E: Engine>: Sized {
     type Target;
@@ -17,7 +18,8 @@ pub trait AnchorExt<E: Engine>: Sized {
     where
         Out: 'static,
         F: 'static,
-        refmap::RefMap<Self::Target, F>: AnchorInner<E, Output = Out> {
+        refmap::RefMap<Self::Target, F>: AnchorInner<E, Output = Out>,
+    {
         unimplemented!()
     }
 
@@ -27,6 +29,14 @@ pub trait AnchorExt<E: Engine>: Sized {
         Out: 'static,
         then::Then<Self::Target, Out, F, E>: AnchorInner<E, Output = Out>;
 
+    fn cutoff<F, Out>(self, _f: F) -> Anchor<Out, E>
+    where
+        Out: 'static,
+        F: 'static,
+        cutoff::Cutoff<Self::Target, F>: AnchorInner<E, Output = Out>,
+    {
+        unimplemented!()
+    }
 }
 
 pub trait AnchorSplit<E: Engine>: Sized {
@@ -76,9 +86,23 @@ where
     where
         Out: 'static,
         F: 'static,
-        refmap::RefMap<Self::Target, F>: AnchorInner<E, Output = Out>
+        refmap::RefMap<Self::Target, F>: AnchorInner<E, Output = Out>,
     {
         E::mount(refmap::RefMap {
+            anchors: (self.clone(),),
+            f,
+            location: Location::caller(),
+        })
+    }
+
+    #[track_caller]
+    fn cutoff<F, Out>(self, f: F) -> Anchor<Out, E>
+    where
+        Out: 'static,
+        F: 'static,
+        cutoff::Cutoff<Self::Target, F>: AnchorInner<E, Output = Out>,
+    {
+        E::mount(cutoff::Cutoff {
             anchors: (self.clone(),),
             f,
             location: Location::caller(),

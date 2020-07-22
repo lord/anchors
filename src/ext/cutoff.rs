@@ -2,18 +2,18 @@ use crate::{Anchor, AnchorInner, Engine, OutputContext, UpdateContext};
 use std::panic::Location;
 use std::task::Poll;
 
-pub struct RefMap<A, F> {
+pub struct Cutoff<A, F> {
     pub(super) f: F,
     pub(super) anchors: A,
     pub(super) location: &'static Location<'static>,
 }
 
-impl<F, In: 'static, Out: 'static, E> AnchorInner<E> for RefMap<(Anchor<In, E>,), F>
+impl<F, In: 'static, E> AnchorInner<E> for Cutoff<(Anchor<In, E>,), F>
 where
     E: Engine,
-    F: for<'any> Fn(&'any In) -> &'any Out,
+    F: for<'any> FnMut(&'any In) -> bool,
 {
-    type Output = Out;
+    type Output = In;
 
     fn dirty(&mut self, _edge: &E::AnchorData) {
         // noop
@@ -29,8 +29,9 @@ where
             return Poll::Pending;
         }
 
-        // TODO fix always marking as dirty
-        Poll::Ready(true)
+        let val = ctx.get(&self.anchors.0);
+
+        Poll::Ready((self.f)(val))
     }
 
     fn output<'slf, 'out, G: OutputContext<'out, Engine = E>>(
@@ -40,11 +41,10 @@ where
     where
         'slf: 'out,
     {
-        let val = ctx.get(&self.anchors.0);
-        (self.f)(val)
+        ctx.get(&self.anchors.0)
     }
 
     fn debug_location(&self) -> Option<(&'static str, &'static Location<'static>)> {
-        Some(("refmap", self.location))
+        Some(("cutoff", self.location))
     }
 }

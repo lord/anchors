@@ -1,14 +1,14 @@
-# anchors
-
-Another incremental computation library, for Rust
+<p align="center">
+  <img src="https://user-images.githubusercontent.com/1976330/88240812-1d9b2680-cc3d-11ea-8836-309e96df981d.png" alt="Anchors: Self-Adjusting Computitons in Rust" width="226">
+  <br>
+  <a href="https://crates.io/crates/anchors"><img src="https://img.shields.io/crates/v/anchors.svg" alt="Crates.io Package"></a> <a href="https://docs.rs/anchors"><img src="https://img.shields.io/badge/docs-docs.rs-success" alt="Docs"></a>
+</p>
 
 ## Features
 
-- lots of bugs. probably major performance problems. incremental computation is hard and i am dumb
 - hybrid graph allows both [Adapton](https://github.com/Adapton/adapton.rust)-style and [Incremental](https://github.com/janestreet/incremental)-style push updates
-- [still have to implement] minimal allocations through the use of [generational-arena](https://github.com/fitzgen/generational-arena)
-- [still have to implement] maybe multithreading engine at some point in the future
-- [still have to implement] values that change over time, similar to [observablehq generators](https://observablehq.com/@observablehq/introduction-to-generators)
+- cloning values in the graph is almost always optional
+- still a work in progress w big performance issues, but should be ""functional""
 
 ## example
 
@@ -73,17 +73,6 @@ Now when you request it, it will [avoid traversing the entire graph quite as fre
 
 - any time you `get` *any* `Anchor`, all observed nodes will be brought up to date.
 - if one of an observed dependencies is a `then`, nodes requested by it [may be recomputed](https://gist.github.com/khooyp/98abc0e64dc296deaa48), even though they aren't strictly necessary.
-
-## later
-
-- if a dirty value recomputes and it's the same, the graph should be able to 'recover' and stop recomputation?
-- speed up by directly calculating a `get` if it is not necessary
-- could optimize a lot (and also maybe do async nodes properly) if context is just a struct like async does it, so that we don't need higher kinded types to do lifetimes on that stuff correctly
-- separate 'dirty' vs 'changed', a node should get a notification for when a dependency is dirty but then when it actually goes to retrieve should be informed if the value has changed since the last get. this is important if a node requests its parents as clean dependencies instead of necessary dependencies
-- async nodes, unfortunately kept implementing things that needed either higher kinded types, or lots of cloning
-- multithreading
-- actual speed, figuring out how to reduce allocations
-- serializing cached computations
 
 ## see also
 

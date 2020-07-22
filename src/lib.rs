@@ -74,7 +74,7 @@ pub trait UpdateContext {
         &mut self,
         anchor: &Anchor<O, Self::Engine>,
         necessary: bool,
-    ) -> Poll<()>;
+    ) -> Poll<bool>;
     fn dirty_handle(&mut self) -> <Self::Engine as Engine>::DirtyHandle;
 }
 
@@ -97,12 +97,36 @@ pub trait AnchorInner<E: Engine + ?Sized> {
 #[cfg(test)]
 mod test {
     use crate::ext::{AnchorExt, AnchorSplit};
-
-    #[derive(PartialEq, Debug)]
-    struct NoClone(usize);
+    #[test]
+    fn test_cutoff_simple() {
+        let mut engine = crate::singlethread::Engine::new();
+        let (v, v_setter) = crate::var::Var::new(100i32);
+        let mut old_val = 0i32;
+        let post_cutoff = v
+            .cutoff(move |new_val| {
+                if (old_val - *new_val).abs() < 50 {
+                    false
+                } else {
+                    old_val = *new_val;
+                    true
+                }
+            })
+            .map(|v| *v + 10);
+        engine.mark_observed(&post_cutoff);
+        assert_eq!(engine.get(&post_cutoff), 110);
+        v_setter.set(125);
+        assert_eq!(engine.get(&post_cutoff), 110);
+        v_setter.set(151);
+        assert_eq!(engine.get(&post_cutoff), 161);
+        v_setter.set(125);
+        assert_eq!(engine.get(&post_cutoff), 161);
+    }
 
     #[test]
     fn test_refmap_simple() {
+        #[derive(PartialEq, Debug)]
+        struct NoClone(usize);
+
         let mut engine = crate::singlethread::Engine::new();
         let (v, _) = crate::var::Var::new((NoClone(1), NoClone(2)));
         let a = v.refmap(|(a, _)| a);
