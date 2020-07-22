@@ -1,3 +1,5 @@
+#![feature(generic_associated_types)]
+
 use std::marker::PhantomData;
 use std::panic::Location;
 use std::task::Poll;
@@ -49,7 +51,7 @@ pub trait Engine: 'static {
     type AnchorData: AnchorData;
     type DirtyHandle: DirtyHandle;
 
-    fn mount<I: AnchorInner<Self> + 'static>(inner: I) -> Anchor<I::Output, Self>;
+    fn mount<I: AnchorInner<Self> + 'static>(inner: I) -> Anchor<I::Output<'static>, Self>;
 }
 
 pub trait DirtyHandle {
@@ -79,13 +81,13 @@ pub trait UpdateContext {
 }
 
 pub trait AnchorInner<E: Engine + ?Sized> {
-    type Output: 'static;
+    type Output<'out>;
     fn dirty(&mut self, child: &E::AnchorData);
     fn poll_updated<G: UpdateContext<Engine = E>>(&mut self, ctx: &mut G) -> Poll<bool>;
     fn output<'slf, 'out, G: OutputContext<'out, Engine = E>>(
         &'slf self,
         ctx: &mut G,
-    ) -> &'out Self::Output
+    ) -> Self::Output<'out>
     where
         'slf: 'out;
 

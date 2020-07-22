@@ -20,7 +20,7 @@ impl<T: 'static> Constant<T> {
 }
 
 impl<T: 'static, E: Engine> AnchorInner<E> for Constant<T> {
-    type Output = T;
+    type Output<'a> = &'a T;
     fn dirty(&mut self, _child: &E::AnchorData) {
         panic!("Constant never has any inputs; dirty should not have been called.")
     }
@@ -32,7 +32,7 @@ impl<T: 'static, E: Engine> AnchorInner<E> for Constant<T> {
     fn output<'slf, 'out, G: OutputContext<'out, Engine = E>>(
         &'slf self,
         _ctx: &mut G,
-    ) -> &'out Self::Output
+    ) -> Self::Output<'out>
     where
         'slf: 'out,
     {

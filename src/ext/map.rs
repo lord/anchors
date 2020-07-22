@@ -21,7 +21,7 @@ macro_rules! impl_tuple_map {
             )+
             E: Engine,
         {
-            type Output = Out;
+            type Output<'a> = &'a Out;
             fn dirty(&mut self, _edge: &E::AnchorData) {
                 self.output = None;
             }
@@ -54,7 +54,7 @@ macro_rules! impl_tuple_map {
             fn output<'slf, 'out, G: OutputContext<'out, Engine=E>>(
                 &'slf self,
                 _ctx: &mut G,
-            ) -> &'out Self::Output
+            ) -> Self::Output<'out>
             where
                 'slf: 'out,
             {

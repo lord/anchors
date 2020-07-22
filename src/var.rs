@@ -50,7 +50,7 @@ impl<T: 'static, H: DirtyHandle> VarSetter<T, H> {
 }
 
 impl<E: Engine, T: 'static> AnchorInner<E> for Var<T, E::DirtyHandle> {
-    type Output = T;
+    type Output<'a> = &'a T;
     fn dirty(&mut self, _edge: &E::AnchorData) {
         panic!("somehow an input was dirtied on var; it never has any inputs to dirty")
     }
@@ -73,7 +73,7 @@ impl<E: Engine, T: 'static> AnchorInner<E> for Var<T, E::DirtyHandle> {
     fn output<'slf, 'out, G: OutputContext<'out, Engine = E>>(
         &'slf self,
         _ctx: &mut G,
-    ) -> &'out Self::Output
+    ) -> Self::Output<'out>
     where
         'slf: 'out,
     {

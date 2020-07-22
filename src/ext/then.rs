@@ -21,7 +21,7 @@ macro_rules! impl_tuple_then {
             )+
             E: Engine,
         {
-            type Output = Out;
+            type Output<'a> = &'a Out;
             fn dirty(&mut self, edge: &E::AnchorData) {
                 $(
                     // only invalidate f_anchor if one of the lhs anchors is invalidated
@@ -61,7 +61,7 @@ macro_rules! impl_tuple_then {
             fn output<'slf, 'out, G: OutputContext<'out, Engine=E>>(
                 &'slf self,
                 ctx: &mut G,
-            ) -> &'out Self::Output
+            ) -> Self::Output<'out>
             where
                 'slf: 'out,
             {
