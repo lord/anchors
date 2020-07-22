@@ -99,7 +99,7 @@ macro_rules! impl_tuple_ext {
 
             fn split(&self) -> Self::Target {
                 ($(
-                    self.map(|v| v.$num.clone()),
+                    self.refmap(|v| &v.$num),
                 )+)
             }
         }
