@@ -1,5 +1,3 @@
-#![feature(track_caller)]
-
 use std::marker::PhantomData;
 use std::panic::Location;
 use std::task::Poll;

@@ -1,6 +1,6 @@
 [package]
 name = "anchors"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Robert Lord <robert@lord.io>"]
 edition = "2018"
 description = "async incremental computations"
