@@ -104,8 +104,10 @@ mod test {
         let mut old_val = 0i32;
         let post_cutoff = v.cutoff(move |new_val| {
             if (old_val-*new_val).abs() < 50 {
+                println!("old!");
                 false
             } else {
+                println!("new!");
                 old_val = *new_val;
                 true
             }
