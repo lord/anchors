@@ -40,7 +40,6 @@ impl crate::Engine for Engine {
                 .expect("no engine was initialized. did you call `Engine::new()`?");
             let debug_info = inner.debug_info();
             let num = this.nodes.borrow_mut().insert(Node {
-                state: NodeState::Unclean,
                 observed: false,
                 anchor: Rc::new(RefCell::new(inner)),
                 debug_info,
@@ -54,17 +53,7 @@ impl crate::Engine for Engine {
     }
 }
 
-#[derive(PartialEq, Eq, Debug)]
-enum NodeState {
-    /// Indicates this node is NOT in the to_recalculate heap, and its output is not yet ready.
-    Unclean,
-    /// Indicates, assuming all nodes with lower height have been calculated, this node's output
-    /// is current.
-    Clean,
-}
-
 struct Node {
-    state: NodeState,
     observed: bool,
     debug_info: AnchorDebugInfo,
     anchor: Rc<RefCell<dyn GenericAnchor>>,
@@ -98,7 +87,7 @@ impl Engine {
             .get_mut(anchor.data.num)
             .unwrap()
             .observed = true;
-        if self.nodes.borrow()[anchor.data.num].state == NodeState::Unclean {
+        if self.graph.is_dirty(anchor.data.num) {
             self.mark_node_for_recalculation(anchor.data.num);
         }
     }
@@ -116,7 +105,7 @@ impl Engine {
         // stabilize once before, since the stabilization process may mark our requested node
         // as dirty
         self.stabilize();
-        if self.nodes.borrow().get(anchor.data.num).unwrap().state == NodeState::Unclean {
+        if self.graph.is_dirty(anchor.data.num) {
             self.to_recalculate
                 .insert(self.graph.height(anchor.data.num), anchor.data.num);
             // stabilize again, to make sure our target node that is now in the queue is up-to-date
@@ -137,6 +126,7 @@ impl Engine {
     pub fn stabilize<'a>(&'a mut self) {
         let dirty_marks = std::mem::replace(&mut *self.dirty_marks.borrow_mut(), Vec::new());
         for dirty in dirty_marks {
+            self.graph.mark_dirty(dirty);
             self.mark_node_dirty(dirty);
         }
 
@@ -150,11 +140,7 @@ impl Engine {
             };
 
             if calculation_complete {
-                self.nodes
-                    .borrow_mut()
-                    .get_mut(this_node_num)
-                    .unwrap()
-                    .state = NodeState::Clean;
+                self.graph.mark_clean(this_node_num);
             } else {
                 self.to_recalculate
                     .insert(self.graph.height(this_node_num), this_node_num);
@@ -234,7 +220,6 @@ impl Engine {
             self.mark_node_for_recalculation(node_id);
         } else {
             self.mark_parents_dirty(node_id);
-            self.nodes.borrow_mut().get_mut(node_id).unwrap().state = NodeState::Unclean;
         };
     }
 
@@ -334,9 +319,7 @@ impl<'eng> OutputContext<'eng> for EngineContext<'eng> {
         'eng: 'out,
     {
         let target_node = &self.engine.nodes.borrow()[anchor.data.num];
-        if self.engine.graph.edge(anchor.data.num, self.node_num) == graph::EdgeState::Dirty
-            || target_node.state != NodeState::Clean
-        {
+        if self.engine.to_recalculate.contains(anchor.data.num) || self.engine.graph.is_dirty(anchor.data.num) || self.engine.graph.edge(anchor.data.num, self.node_num) == graph::EdgeState::Dirty {
             panic!("attempted to get node that was not previously requested")
         }
         // TODO try to wrap all of this in a safe interface?
@@ -360,9 +343,7 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
         'slf: 'out,
     {
         let target_node = &self.engine.nodes.borrow()[anchor.data.num];
-        if self.engine.graph.edge(anchor.data.num, self.node_num) == graph::EdgeState::Dirty
-            || target_node.state != NodeState::Clean
-        {
+        if self.engine.to_recalculate.contains(anchor.data.num) || self.engine.graph.is_dirty(anchor.data.num) || self.engine.graph.edge(anchor.data.num, self.node_num) == graph::EdgeState::Dirty {
             panic!("attempted to get node that was not previously requested")
         }
 
@@ -385,7 +366,7 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
         let my_height = self.engine.graph.height(self.node_num);
         let child_height = self.engine.graph.height(anchor.data.num);
         let self_is_necessary = self.engine.graph.is_necessary(self.node_num);
-        let child_is_clean = self.engine.nodes.borrow()[anchor.data.num].state == NodeState::Clean;
+        let child_is_clean = !self.engine.graph.is_dirty(anchor.data.num);
         // setting edge updates heights; important to know previous heights before calling this
         let res = self.engine.graph.set_edge(
             anchor.data.num,
