@@ -104,23 +104,22 @@ mod test {
         let mut old_val = 0i32;
         let post_cutoff = v.cutoff(move |new_val| {
             if (old_val-*new_val).abs() < 50 {
-                println!("old!");
                 false
             } else {
-                println!("new!");
                 old_val = *new_val;
                 true
             }
         }).map(|v| {
-            println!("recalc map");
             *v + 10
         });
         engine.mark_observed(&post_cutoff);
         assert_eq!(engine.get(&post_cutoff), 110);
-        v_setter.set(101);
+        v_setter.set(125);
         assert_eq!(engine.get(&post_cutoff), 110);
-        v_setter.set(200);
-        assert_eq!(engine.get(&post_cutoff), 210);
+        v_setter.set(151);
+        assert_eq!(engine.get(&post_cutoff), 161);
+        v_setter.set(125);
+        assert_eq!(engine.get(&post_cutoff), 161);
     }
 
     #[test]
