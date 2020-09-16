@@ -22,7 +22,8 @@ struct Node<T: Eq + Copy + Debug + Key + Ord> {
     /// Used when setting heights to detect cycles
     visited: bool,
 
-    /// TODO ONLY ONCE THAT IS SOLVED WILL WE SOLVE CHANGE DATA STORAGE FOR SAVING CALCULATIONS ON NON OBSERVED NODES
+    /// Indicates if a node was either marked dirty manually, or if an inbound edge was set to dirty.
+    /// Can be reset back to clean with mark_clean.
     dirty: bool,
 }
 impl<T: Eq + Copy + Debug + Key + Ord> Default for Node<T> {
