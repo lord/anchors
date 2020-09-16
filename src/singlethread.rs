@@ -40,7 +40,7 @@ impl crate::Engine for Engine {
                 .expect("no engine was initialized. did you call `Engine::new()`?");
             let debug_info = inner.debug_info();
             let num = this.nodes.borrow_mut().insert(Node {
-                state: NodeState::Dirty,
+                state: NodeState::Unclean,
                 observed: false,
                 anchor: Rc::new(RefCell::new(inner)),
                 debug_info,
@@ -57,9 +57,7 @@ impl crate::Engine for Engine {
 #[derive(PartialEq, Eq, Debug)]
 enum NodeState {
     /// Indicates this node is NOT in the to_recalculate heap, and its output is not yet ready.
-    Dirty,
-    /// Indicates this node is in the to_recalculate heap, and its output is not yet ready.
-    Pending,
+    Unclean,
     /// Indicates, assuming all nodes with lower height have been calculated, this node's output
     /// is current.
     Clean,
@@ -100,7 +98,7 @@ impl Engine {
             .get_mut(anchor.data.num)
             .unwrap()
             .observed = true;
-        if self.nodes.borrow()[anchor.data.num].state == NodeState::Dirty {
+        if self.nodes.borrow()[anchor.data.num].state == NodeState::Unclean {
             self.mark_node_for_recalculation(anchor.data.num);
         }
     }
@@ -118,7 +116,7 @@ impl Engine {
         // stabilize once before, since the stabilization process may mark our requested node
         // as dirty
         self.stabilize();
-        if self.nodes.borrow().get(anchor.data.num).unwrap().state == NodeState::Dirty {
+        if self.nodes.borrow().get(anchor.data.num).unwrap().state == NodeState::Unclean {
             self.to_recalculate
                 .insert(self.graph.height(anchor.data.num), anchor.data.num);
             // stabilize again, to make sure our target node that is now in the queue is up-to-date
@@ -158,14 +156,8 @@ impl Engine {
                     .unwrap()
                     .state = NodeState::Clean;
             } else {
-                // re-insert node into queue, leaving state as Pending
                 self.to_recalculate
                     .insert(self.graph.height(this_node_num), this_node_num);
-                self.nodes
-                    .borrow_mut()
-                    .get_mut(this_node_num)
-                    .unwrap()
-                    .state = NodeState::Pending;
             }
         }
 
@@ -242,15 +234,14 @@ impl Engine {
             self.mark_node_for_recalculation(node_id);
         } else {
             self.mark_parents_dirty(node_id);
-            self.nodes.borrow_mut().get_mut(node_id).unwrap().state = NodeState::Dirty;
+            self.nodes.borrow_mut().get_mut(node_id).unwrap().state = NodeState::Unclean;
         };
     }
 
     fn mark_node_for_recalculation(&mut self, node_id: NodeNum) {
-        if self.nodes.borrow().get(node_id).unwrap().state != NodeState::Pending {
+        if !self.to_recalculate.contains(node_id) {
             self.to_recalculate
                 .insert(self.graph.height(node_id), node_id);
-            self.nodes.borrow_mut().get_mut(node_id).unwrap().state = NodeState::Pending;
         }
     }
 
