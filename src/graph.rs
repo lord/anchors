@@ -22,7 +22,6 @@ struct Node<T: Eq + Copy + Debug + Key + Ord> {
     /// Used when setting heights to detect cycles
     visited: bool,
 
-    /// TODO THEN SOLVE NECESSARY RELOADING ISSUE CAUSING CUTOFF TEST FAILURE — SHOULD NOT NEED TO STORE CHANGE DATA
     /// TODO ONLY ONCE THAT IS SOLVED WILL WE SOLVE CHANGE DATA STORAGE FOR SAVING CALCULATIONS ON NON OBSERVED NODES
     dirty: bool,
 }
@@ -137,7 +136,6 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         node.dirty = false;
     }
 
-    #[allow(dead_code)]
     pub fn necessary_parents(&self, node_id: T) -> Vec<T> {
         self.get_parents(node_id, true)
     }
@@ -155,6 +153,7 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         node.parents.iter().map(|(v, _)| v.clone()).collect()
     }
 
+    #[allow(dead_code)]
     pub fn necessary_children(&self, node_id: T) -> Vec<T> {
         self.get_children(node_id, true)
     }

@@ -29,10 +29,6 @@ impl<T: Hash + Eq + Debug + Key> RefCounter<T> {
         self.inner.borrow_mut().counts.insert(item, 1);
     }
 
-    pub fn contains(&self, item: T) -> bool {
-        self.inner.borrow_mut().counts.contains_key(item)
-    }
-
     pub fn increment(&self, item: T) {
         *self
             .inner
