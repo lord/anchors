@@ -1,4 +1,4 @@
-use slotmap::{SecondaryMap, Key};
+use slotmap::{Key, SecondaryMap};
 
 pub struct FakeHeap<T: Key> {
     min_height: usize,
@@ -61,13 +61,19 @@ impl<T: Key> FakeHeap<T> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use slotmap::{SlotMap, DefaultKey};
+    use slotmap::{DefaultKey, SlotMap};
 
     #[test]
     fn test_insert_pop_and_contains() {
         let (a, b, c, d, e) = {
             let mut map = SlotMap::new();
-            (map.insert(()), map.insert(()), map.insert(()), map.insert(()), map.insert(()))
+            (
+                map.insert(()),
+                map.insert(()),
+                map.insert(()),
+                map.insert(()),
+                map.insert(()),
+            )
         };
         let mut heap: FakeHeap<DefaultKey> = FakeHeap::new(10);
 

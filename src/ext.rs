@@ -1,10 +1,10 @@
 use super::{Anchor, AnchorInner, Engine};
 use std::panic::Location;
 
+mod cutoff;
 mod map;
 mod refmap;
 mod then;
-mod cutoff;
 
 pub trait AnchorExt<E: Engine>: Sized {
     type Target;

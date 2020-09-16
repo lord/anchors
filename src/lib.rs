@@ -102,16 +102,16 @@ mod test {
         let mut engine = crate::singlethread::Engine::new();
         let (v, v_setter) = crate::var::Var::new(100i32);
         let mut old_val = 0i32;
-        let post_cutoff = v.cutoff(move |new_val| {
-            if (old_val-*new_val).abs() < 50 {
-                false
-            } else {
-                old_val = *new_val;
-                true
-            }
-        }).map(|v| {
-            *v + 10
-        });
+        let post_cutoff = v
+            .cutoff(move |new_val| {
+                if (old_val - *new_val).abs() < 50 {
+                    false
+                } else {
+                    old_val = *new_val;
+                    true
+                }
+            })
+            .map(|v| *v + 10);
         engine.mark_observed(&post_cutoff);
         assert_eq!(engine.get(&post_cutoff), 110);
         v_setter.set(125);

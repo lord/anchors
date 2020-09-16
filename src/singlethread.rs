@@ -321,7 +321,10 @@ impl<'eng> OutputContext<'eng> for EngineContext<'eng> {
         'eng: 'out,
     {
         let target_node = &self.engine.nodes.borrow()[anchor.data.num];
-        if self.engine.to_recalculate.contains(anchor.data.num) || self.engine.graph.is_dirty(anchor.data.num) || self.engine.graph.edge(anchor.data.num, self.node_num) == graph::EdgeState::Dirty {
+        if self.engine.to_recalculate.contains(anchor.data.num)
+            || self.engine.graph.is_dirty(anchor.data.num)
+            || self.engine.graph.edge(anchor.data.num, self.node_num) == graph::EdgeState::Dirty
+        {
             panic!("attempted to get node that was not previously requested")
         }
         // TODO try to wrap all of this in a safe interface?
@@ -345,7 +348,10 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
         'slf: 'out,
     {
         let target_node = &self.engine.nodes.borrow()[anchor.data.num];
-        if self.engine.to_recalculate.contains(anchor.data.num) || self.engine.graph.is_dirty(anchor.data.num) || self.engine.graph.edge(anchor.data.num, self.node_num) == graph::EdgeState::Dirty {
+        if self.engine.to_recalculate.contains(anchor.data.num)
+            || self.engine.graph.is_dirty(anchor.data.num)
+            || self.engine.graph.edge(anchor.data.num, self.node_num) == graph::EdgeState::Dirty
+        {
             panic!("attempted to get node that was not previously requested")
         }
 
@@ -367,7 +373,15 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
     ) -> Poll<bool> {
         let my_height = self.engine.graph.height(self.node_num);
         let child_height = self.engine.graph.height(anchor.data.num);
-        let self_is_necessary = self.engine.graph.is_necessary(self.node_num) || self.engine.nodes.borrow().get(self.node_num).as_ref().unwrap().observed;
+        let self_is_necessary = self.engine.graph.is_necessary(self.node_num)
+            || self
+                .engine
+                .nodes
+                .borrow()
+                .get(self.node_num)
+                .as_ref()
+                .unwrap()
+                .observed;
         let child_is_clean = !self.engine.graph.is_dirty(anchor.data.num);
         // setting edge updates heights; important to know previous heights before calling this
         let res = self.engine.graph.set_edge(

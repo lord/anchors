@@ -169,7 +169,10 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
     }
 
     pub fn is_dirty(&self, node_id: T) -> bool {
-        self.nodes.get(node_id).map(|node| node.dirty).unwrap_or(true)
+        self.nodes
+            .get(node_id)
+            .map(|node| node.dirty)
+            .unwrap_or(true)
     }
 
     pub fn height(&self, node_id: T) -> usize {
