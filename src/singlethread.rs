@@ -390,7 +390,7 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
         &mut self,
         anchor: &Anchor<O, Self::Engine>,
         necessary: bool,
-    ) -> Poll<()> {
+    ) -> Poll<bool> {
         let my_height = self.engine.graph.height(self.node_num);
         let child_height = self.engine.graph.height(anchor.data.num);
         let self_is_necessary = self.engine.graph.is_necessary(self.node_num);
@@ -414,7 +414,7 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
             self.pending_on_anchor_get = true;
             Poll::Pending
         } else {
-            Poll::Ready(())
+            Poll::Ready(true) // TODO FIX
         }
     }
 

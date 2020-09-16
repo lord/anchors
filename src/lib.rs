@@ -74,7 +74,7 @@ pub trait UpdateContext {
         &mut self,
         anchor: &Anchor<O, Self::Engine>,
         necessary: bool,
-    ) -> Poll<()>;
+    ) -> Poll<bool>;
     fn dirty_handle(&mut self) -> <Self::Engine as Engine>::DirtyHandle;
 }
 
