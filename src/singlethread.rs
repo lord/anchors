@@ -100,6 +100,7 @@ impl Engine {
             .unwrap()
             .observed = false;
         // TODO remove from calculation queue if necessary?
+        // TODO need to unobserve child nodes here
     }
 
     pub fn get<'out, O: Clone + 'static>(&mut self, anchor: &Anchor<O, Engine>) -> O {
@@ -191,8 +192,8 @@ impl Engine {
             }
             Poll::Ready(output_changed) => {
                 if output_changed {
-                    // make sure all parents are marked as dirty
-                    self.mark_parents_dirty(this_node_num);
+                    // make sure all parents are marked as dirty, and observed parents are recalculated
+                    self.mark_parents_dirty(this_node_num, true);
                 }
                 true
             }
@@ -221,7 +222,7 @@ impl Engine {
             println!("marking node for recalc bc marked as dirty: {:?}", node_id);
             self.mark_node_for_recalculation(node_id);
         } else {
-            self.mark_parents_dirty(node_id);
+            self.mark_parents_dirty(node_id, false);
         };
     }
 
@@ -232,9 +233,10 @@ impl Engine {
         }
     }
 
-    fn mark_parents_dirty(&mut self, node_id: NodeNum) {
+    fn mark_parents_dirty(&mut self, node_id: NodeNum, include_necessary: bool) {
         for parent in self.graph.parents(node_id) {
-            if self.graph.edge(node_id, parent) == graph::EdgeState::Clean {
+            let edge = self.graph.edge(node_id, parent);
+            if edge == graph::EdgeState::Clean {
                 // Observed edges remain marked as observed
                 let res = self
                     .graph
@@ -249,6 +251,7 @@ impl Engine {
             anchor.borrow_mut().dirty(&anchor_data);
             // mem::forget here so we skip calling AnchorData's Drop; don't want to decrement reference count
             std::mem::forget(anchor_data);
+            println!("marking node dirty from child: {:?} {:?}", parent, edge);
             self.mark_node_dirty(parent);
         }
     }
@@ -367,7 +370,7 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
     ) -> Poll<bool> {
         let my_height = self.engine.graph.height(self.node_num);
         let child_height = self.engine.graph.height(anchor.data.num);
-        let self_is_necessary = self.engine.graph.is_necessary(self.node_num);
+        let self_is_necessary = self.engine.graph.is_necessary(self.node_num) || self.engine.nodes.borrow().get(self.node_num).as_ref().unwrap().observed;
         let child_is_clean = !self.engine.graph.is_dirty(anchor.data.num);
         // setting edge updates heights; important to know previous heights before calling this
         let res = self.engine.graph.set_edge(

@@ -119,7 +119,8 @@ mod test {
         assert_eq!(engine.get(&post_cutoff), 110);
         v_setter.set(101);
         assert_eq!(engine.get(&post_cutoff), 110);
-        panic!("foo")
+        v_setter.set(200);
+        assert_eq!(engine.get(&post_cutoff), 210);
     }
 
     #[test]

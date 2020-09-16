@@ -165,7 +165,7 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
     }
 
     pub fn is_necessary(&self, node_id: T) -> bool {
-        self.necessary_children(node_id).len() > 0
+        self.necessary_parents(node_id).len() > 0
     }
 
     pub fn is_dirty(&self, node_id: T) -> bool {
@@ -281,8 +281,8 @@ mod test {
         assert_eq!(vec![k(1)], graph.necessary_children(k(2)));
         assert_eq!(empty, graph.clean_parents(k(2)));
         assert_eq!(empty, graph.clean_children(k(2)));
-        assert_eq!(false, graph.is_necessary(k(1)));
-        assert_eq!(true, graph.is_necessary(k(2)));
+        assert_eq!(true, graph.is_necessary(k(1)));
+        assert_eq!(false, graph.is_necessary(k(2)));
 
         graph.set_edge(k(1), k(2), EdgeState::Dirty).unwrap();
 
