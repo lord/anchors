@@ -1,6 +1,5 @@
-use crate::{Anchor, AnchorInner, Engine, OutputContext, UpdateContext};
+use crate::{Anchor, AnchorHandle, AnchorInner, Engine, OutputContext, Poll, UpdateContext};
 use std::panic::Location;
-use std::task::Poll;
 
 pub struct Constant<T> {
     val: T,
@@ -21,11 +20,15 @@ impl<T: 'static> Constant<T> {
 
 impl<T: 'static, E: Engine> AnchorInner<E> for Constant<T> {
     type Output = T;
-    fn dirty(&mut self, _child: &E::AnchorData) {
+    fn dirty(&mut self, _child: &<E::AnchorHandle as AnchorHandle>::Token) {
         panic!("Constant never has any inputs; dirty should not have been called.")
     }
-    fn poll_updated<G: UpdateContext<Engine = E>>(&mut self, _ctx: &mut G) -> Poll<bool> {
-        let res = Poll::Ready(self.first_poll);
+    fn poll_updated<G: UpdateContext<Engine = E>>(&mut self, _ctx: &mut G) -> Poll {
+        let res = if self.first_poll {
+            Poll::Updated
+        } else {
+            Poll::Unchanged
+        };
         self.first_poll = false;
         res
     }

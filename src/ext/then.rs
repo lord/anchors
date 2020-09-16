@@ -1,10 +1,10 @@
-use crate::{Anchor, AnchorInner, Engine, OutputContext, UpdateContext};
+use crate::{Anchor, AnchorHandle, AnchorInner, Engine, OutputContext, Poll, UpdateContext};
 use std::panic::Location;
-use std::task::Poll;
 
 pub struct Then<A, Out, F, E: Engine> {
     pub(super) f: F,
     pub(super) f_anchor: Option<Anchor<Out, E>>,
+    pub(super) lhs_stale: bool,
     pub(super) anchors: A,
     pub(super) location: &'static Location<'static>,
 }
@@ -22,11 +22,11 @@ macro_rules! impl_tuple_then {
             E: Engine,
         {
             type Output = Out;
-            fn dirty(&mut self, edge: &E::AnchorData) {
+            fn dirty(&mut self, edge: &<E::AnchorHandle as AnchorHandle>::Token) {
                 $(
                     // only invalidate f_anchor if one of the lhs anchors is invalidated
-                    if edge == &self.anchors.$num.data {
-                        self.f_anchor = None;
+                    if edge == &self.anchors.$num.data.token() {
+                        self.lhs_stale = true;
                         return;
                     }
                 )+
@@ -34,13 +34,22 @@ macro_rules! impl_tuple_then {
             fn poll_updated<G: UpdateContext<Engine=E>>(
                 &mut self,
                 ctx: &mut G,
-            ) -> Poll<bool> {
-                if self.f_anchor.is_none() {
+            ) -> Poll {
+                if self.f_anchor.is_none() || self.lhs_stale {
                     let mut found_pending = false;
+                    let mut found_updated = false;
 
                     $(
-                        if ctx.request(&self.anchors.$num, true).is_pending() {
-                            found_pending = true;
+                        match ctx.request(&self.anchors.$num, true) {
+                            Poll::Pending => {
+                                found_pending = true;
+                            }
+                            Poll::Updated => {
+                                found_updated = true;
+                            }
+                            Poll::Unchanged => {
+                                // do nothing
+                            }
                         }
                     )+
 
@@ -48,15 +57,23 @@ macro_rules! impl_tuple_then {
                         return Poll::Pending;
                     }
 
-                    let new_anchor = (self.f)($(&ctx.get(&self.anchors.$num)),+);
-                    self.f_anchor = Some(new_anchor);
+                    self.lhs_stale = false;
+
+                    if self.f_anchor.is_none() || found_updated {
+                        let new_anchor = (self.f)($(&ctx.get(&self.anchors.$num)),+);
+                        match self.f_anchor.as_ref() {
+                            Some(outdated_anchor) if outdated_anchor != &new_anchor => {
+                                // changed, so unfollow old
+                                ctx.unrequest(outdated_anchor);
+                            }
+                            _ => {
+                            }
+                        }
+                        self.f_anchor = Some(new_anchor);
+                    }
                 }
 
-                if ctx.request(&self.f_anchor.as_ref().unwrap(), true).is_pending() {
-                    return Poll::Pending;
-                }
-                // TODO need to somehow get update-data from request so that we can appopriately set this here
-                Poll::Ready(true)
+                ctx.request(&self.f_anchor.as_ref().unwrap(), true)
             }
             fn output<'slf, 'out, G: OutputContext<'out, Engine=E>>(
                 &'slf self,
