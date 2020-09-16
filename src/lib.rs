@@ -111,11 +111,15 @@ mod test {
                 old_val = *new_val;
                 true
             }
-        }).map(|v| *v + 10);
+        }).map(|v| {
+            println!("recalc map");
+            *v + 10
+        });
         engine.mark_observed(&post_cutoff);
         assert_eq!(engine.get(&post_cutoff), 110);
         v_setter.set(101);
         assert_eq!(engine.get(&post_cutoff), 110);
+        panic!("foo")
     }
 
     #[test]

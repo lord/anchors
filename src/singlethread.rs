@@ -88,6 +88,7 @@ impl Engine {
             .unwrap()
             .observed = true;
         if self.graph.is_dirty(anchor.data.num) {
+            println!("marking node for recalc bc newly observed and dirty: {:?}", anchor.data.num);
             self.mark_node_for_recalculation(anchor.data.num);
         }
     }
@@ -217,6 +218,7 @@ impl Engine {
 
     fn mark_node_dirty(&mut self, node_id: NodeNum) {
         if self.graph.is_necessary(node_id) || self.nodes.borrow()[node_id].observed {
+            println!("marking node for recalc bc marked as dirty: {:?}", node_id);
             self.mark_node_for_recalculation(node_id);
         } else {
             self.mark_parents_dirty(node_id);
@@ -239,15 +241,15 @@ impl Engine {
                     .set_edge(node_id, parent, graph::EdgeState::Dirty);
                 self.panic_if_loop(res);
             }
-            if self.refcounter.contains(node_id) {
-                self.refcounter.increment(node_id);
-                let anchor = self.nodes.borrow().get(parent).unwrap().anchor.clone();
-                anchor.borrow_mut().dirty(&AnchorData {
-                    num: node_id,
-                    refcounter: self.refcounter.clone(),
-                });
-                self.mark_node_dirty(parent);
-            }
+            let anchor = self.nodes.borrow().get(parent).unwrap().anchor.clone();
+            let anchor_data = AnchorData {
+                num: node_id,
+                refcounter: self.refcounter.clone(),
+            };
+            anchor.borrow_mut().dirty(&anchor_data);
+            // mem::forget here so we skip calling AnchorData's Drop; don't want to decrement reference count
+            std::mem::forget(anchor_data);
+            self.mark_node_dirty(parent);
         }
     }
 }
@@ -380,6 +382,7 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
         self.engine.panic_if_loop(res);
         if !child_is_clean {
             self.pending_on_anchor_get = true;
+            println!("marking node for recalc bc requested and not clean: {:?}", anchor.data.num);
             self.engine.mark_node_for_recalculation(anchor.data.num);
             Poll::Pending
         } else if my_height <= child_height {
