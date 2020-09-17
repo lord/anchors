@@ -214,7 +214,7 @@ impl Engine {
     fn mark_node_dirty(&mut self, node_id: NodeNum) {
         if self.graph.is_necessary(node_id) || self.nodes.borrow()[node_id].observed {
             self.mark_node_for_recalculation(node_id);
-        } else {
+        } else if self.to_recalculate.state(node_id) == NodeState::Ready {
             self.to_recalculate.needs_recalc(node_id);
             self.mark_parents_dirty(node_id, false);
         };
@@ -229,13 +229,7 @@ impl Engine {
 
     fn mark_parents_dirty(&mut self, node_id: NodeNum, definitely_changed: bool) {
         for parent in self.graph.parents(node_id) {
-            self.to_recalculate.needs_recalc(node_id);
-            if definitely_changed {
-                let res = self
-                    .graph
-                    .set_edge(node_id, parent, graph::EdgeState::Dirty);
-                self.panic_if_loop(res);
-            }
+            // TODO now that we don't delete edges, this is called multiple times in some cases
             self.nodes
                 .borrow()
                 .get(parent)
@@ -243,7 +237,15 @@ impl Engine {
                 .anchor
                 .borrow_mut()
                 .dirty(&node_id);
+
             self.mark_node_dirty(parent);
+
+            if definitely_changed {
+                let res = self
+                    .graph
+                    .set_edge(node_id, parent, graph::EdgeState::Dirty);
+                self.panic_if_loop(res);
+            }
         }
     }
 }
