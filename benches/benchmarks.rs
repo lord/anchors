@@ -3,7 +3,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion, Benchmark
 
 fn stabilize_linear_nodes(c: &mut Criterion) {
     for input in &[10, 100, 1000] {
-        c.bench_with_input(BenchmarkId::new("stabilize_linear_nodes", *input), input, |b, i| {
+        c.bench_with_input(BenchmarkId::new("stabilize_linear_nodes_unobserved", *input), input, |b, i| {
             let mut engine = Engine::new_with_max_height(1003);
             let (first_num, set_first_num) = Var::new(0u64);
             let mut node = first_num;
@@ -23,7 +23,7 @@ fn stabilize_linear_nodes(c: &mut Criterion) {
 
 fn stabilize_observed_linear_nodes(c: &mut Criterion) {
     for input in &[10, 100, 1000] {
-        c.bench_with_input(BenchmarkId::new("stabilize_linear_nodes", *input), input, |b, i| {
+        c.bench_with_input(BenchmarkId::new("stabilize_linear_nodes_observed", *input), input, |b, i| {
             let mut engine = Engine::new_with_max_height(1003);
             let (first_num, set_first_num) = Var::new(0u64);
             let mut node = first_num;
@@ -45,6 +45,6 @@ fn stabilize_observed_linear_nodes(c: &mut Criterion) {
 criterion_group!{
     name = benches;
     config = Criterion::default();
-    targets = stabilize_linear_nodes
+    targets = stabilize_linear_nodes, stabilize_observed_linear_nodes
 }
 criterion_main!(benches);
