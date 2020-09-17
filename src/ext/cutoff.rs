@@ -1,6 +1,5 @@
-use crate::{Anchor, AnchorInner, Engine, OutputContext, UpdateContext};
+use crate::{Anchor, AnchorHandle, AnchorInner, Engine, OutputContext, Poll, UpdateContext};
 use std::panic::Location;
-use std::task::Poll;
 
 pub struct Cutoff<A, F> {
     pub(super) f: F,
@@ -15,23 +14,21 @@ where
 {
     type Output = In;
 
-    fn dirty(&mut self, _edge: &E::AnchorData) {
+    fn dirty(&mut self, _edge: &<E::AnchorHandle as AnchorHandle>::Token) {
         // noop
     }
-    fn poll_updated<G: UpdateContext<Engine = E>>(&mut self, ctx: &mut G) -> Poll<bool> {
-        let mut found_pending = false;
-
-        if ctx.request(&self.anchors.0, true).is_pending() {
-            found_pending = true;
-        }
-
-        if found_pending {
-            return Poll::Pending;
+    fn poll_updated<G: UpdateContext<Engine = E>>(&mut self, ctx: &mut G) -> Poll {
+        let upstream_poll = ctx.request(&self.anchors.0, true);
+        if upstream_poll != Poll::Updated {
+            return upstream_poll;
         }
 
         let val = ctx.get(&self.anchors.0);
-
-        Poll::Ready((self.f)(val))
+        if (self.f)(val) {
+            Poll::Updated
+        } else {
+            Poll::Unchanged
+        }
     }
 
     fn output<'slf, 'out, G: OutputContext<'out, Engine = E>>(

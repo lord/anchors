@@ -1,25 +1,32 @@
 use std::marker::PhantomData;
 use std::panic::Location;
-use std::task::Poll;
 
 mod ext;
 pub use ext::AnchorExt;
 mod constant;
 mod fakeheap;
 mod graph;
+mod nodequeue;
 mod refcounter;
 pub mod singlethread;
 mod var;
 pub use constant::Constant;
 pub use var::{Var, VarSetter};
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum Poll {
+    Updated,
+    Unchanged,
+    Pending,
+}
+
 pub struct Anchor<O, E: Engine + ?Sized> {
-    pub data: E::AnchorData,
+    pub data: E::AnchorHandle,
     phantom: PhantomData<O>,
 }
 
 impl<O, E: Engine> Anchor<O, E> {
-    fn new(data: E::AnchorData) -> Self {
+    fn new(data: E::AnchorHandle) -> Self {
         Self {
             data,
             phantom: PhantomData,
@@ -38,15 +45,18 @@ impl<O, E: Engine> Clone for Anchor<O, E> {
 
 impl<O, E: Engine> PartialEq for Anchor<O, E> {
     fn eq(&self, other: &Self) -> bool {
-        self.data == other.data
+        self.data.token() == other.data.token()
     }
 }
 impl<O, E: Engine> Eq for Anchor<O, E> {}
 
-pub trait AnchorData: Sized + Clone + PartialEq + Eq + std::hash::Hash {}
+pub trait AnchorHandle: Sized + Clone {
+    type Token: Sized + Clone + Copy + PartialEq + Eq + std::hash::Hash;
+    fn token(&self) -> Self::Token;
+}
 
 pub trait Engine: 'static {
-    type AnchorData: AnchorData;
+    type AnchorHandle: AnchorHandle;
     type DirtyHandle: DirtyHandle;
 
     fn mount<I: AnchorInner<Self> + 'static>(inner: I) -> Anchor<I::Output, Self>;
@@ -74,14 +84,15 @@ pub trait UpdateContext {
         &mut self,
         anchor: &Anchor<O, Self::Engine>,
         necessary: bool,
-    ) -> Poll<bool>;
+    ) -> Poll;
+    fn unrequest<'out, O: 'static>(&mut self, anchor: &Anchor<O, Self::Engine>);
     fn dirty_handle(&mut self) -> <Self::Engine as Engine>::DirtyHandle;
 }
 
 pub trait AnchorInner<E: Engine + ?Sized> {
-    type Output: 'static;
-    fn dirty(&mut self, child: &E::AnchorData);
-    fn poll_updated<G: UpdateContext<Engine = E>>(&mut self, ctx: &mut G) -> Poll<bool>;
+    type Output;
+    fn dirty(&mut self, child: &<E::AnchorHandle as AnchorHandle>::Token);
+    fn poll_updated<G: UpdateContext<Engine = E>>(&mut self, ctx: &mut G) -> Poll;
     fn output<'slf, 'out, G: OutputContext<'out, Engine = E>>(
         &'slf self,
         ctx: &mut G,
@@ -98,7 +109,7 @@ pub trait AnchorInner<E: Engine + ?Sized> {
 mod test {
     use crate::ext::{AnchorExt, AnchorSplit};
     #[test]
-    fn test_cutoff_simple() {
+    fn test_cutoff_simple_observed() {
         let mut engine = crate::singlethread::Engine::new();
         let (v, v_setter) = crate::var::Var::new(100i32);
         let mut old_val = 0i32;
@@ -113,6 +124,30 @@ mod test {
             })
             .map(|v| *v + 10);
         engine.mark_observed(&post_cutoff);
+        assert_eq!(engine.get(&post_cutoff), 110);
+        v_setter.set(125);
+        assert_eq!(engine.get(&post_cutoff), 110);
+        v_setter.set(151);
+        assert_eq!(engine.get(&post_cutoff), 161);
+        v_setter.set(125);
+        assert_eq!(engine.get(&post_cutoff), 161);
+    }
+
+    #[test]
+    fn test_cutoff_simple_unobserved() {
+        let mut engine = crate::singlethread::Engine::new();
+        let (v, v_setter) = crate::var::Var::new(100i32);
+        let mut old_val = 0i32;
+        let post_cutoff = v
+            .cutoff(move |new_val| {
+                if (old_val - *new_val).abs() < 50 {
+                    false
+                } else {
+                    old_val = *new_val;
+                    true
+                }
+            })
+            .map(|v| *v + 10);
         assert_eq!(engine.get(&post_cutoff), 110);
         v_setter.set(125);
         assert_eq!(engine.get(&post_cutoff), 110);

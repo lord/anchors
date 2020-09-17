@@ -1,7 +1,8 @@
-use super::{Anchor, AnchorInner, DirtyHandle, Engine, OutputContext, UpdateContext};
+use super::{
+    Anchor, AnchorHandle, AnchorInner, DirtyHandle, Engine, OutputContext, Poll, UpdateContext,
+};
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::task::Poll;
 
 pub struct Var<T, H> {
     inner: Rc<RefCell<VarInner<T, H>>>,
@@ -51,11 +52,11 @@ impl<T: 'static, H: DirtyHandle> VarSetter<T, H> {
 
 impl<E: Engine, T: 'static> AnchorInner<E> for Var<T, E::DirtyHandle> {
     type Output = T;
-    fn dirty(&mut self, _edge: &E::AnchorData) {
+    fn dirty(&mut self, _edge: &<E::AnchorHandle as AnchorHandle>::Token) {
         panic!("somehow an input was dirtied on var; it never has any inputs to dirty")
     }
 
-    fn poll_updated<G: UpdateContext<Engine = E>>(&mut self, ctx: &mut G) -> Poll<bool> {
+    fn poll_updated<G: UpdateContext<Engine = E>>(&mut self, ctx: &mut G) -> Poll {
         let mut inner = self.inner.borrow_mut();
         let first_update = inner.dirty_handle.is_none();
         if first_update {
@@ -63,10 +64,11 @@ impl<E: Engine, T: 'static> AnchorInner<E> for Var<T, E::DirtyHandle> {
         }
         if let Some(new_val) = inner.val.take() {
             self.my_val = new_val;
-            Poll::Ready(true)
+            Poll::Updated
+        } else if first_update {
+            Poll::Updated
         } else {
-            // always true if this is the first update
-            Poll::Ready(first_update)
+            Poll::Unchanged
         }
     }
 

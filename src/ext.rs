@@ -62,6 +62,7 @@ where
             anchors: (self.clone(),),
             f,
             output: None,
+            output_stale: true,
             location: Location::caller(),
         })
     }
@@ -78,6 +79,7 @@ where
             f,
             f_anchor: None,
             location: Location::caller(),
+            lhs_stale: true,
         })
     }
 
@@ -148,6 +150,7 @@ macro_rules! impl_tuple_ext {
                     anchors: ($(self.$num.clone(),)+),
                     f,
                     output: None,
+                    output_stale: true,
                     location: Location::caller(),
                 })
             }
@@ -164,6 +167,7 @@ macro_rules! impl_tuple_ext {
                     f,
                     f_anchor: None,
                     location: Location::caller(),
+                    lhs_stale: true,
                 })
             }
         }
