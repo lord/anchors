@@ -186,10 +186,6 @@ impl Engine {
                 }
             }
             Poll::Updated => {
-                println!(
-                    "node updated: {}",
-                    this_anchor.borrow().debug_info().to_string()
-                );
                 // make sure all parents are marked as dirty, and observed parents are recalculated
                 self.mark_parents_dirty(this_node_num, true);
                 true
