@@ -231,9 +231,7 @@ impl Engine {
                     .dirty(&node_id);
                 // mark edges as dirty, since skip_self indicates this node's output actually
                 // changed
-                let res = self
-                    .graph
-                    .set_edge(node_id, *item, graph::EdgeState::Dirty);
+                let res = self.graph.set_edge(node_id, *item, graph::EdgeState::Dirty);
                 self.panic_if_loop(res);
             }
             res
@@ -260,7 +258,6 @@ impl Engine {
                     }
                 }
             };
-
         }
     }
 
@@ -270,7 +267,6 @@ impl Engine {
                 .queue_recalc(self.graph.height(node_id), node_id);
         }
     }
-
 }
 
 #[derive(Debug)]

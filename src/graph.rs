@@ -120,31 +120,37 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         self.nodes.remove(node_id);
     }
 
-    pub fn necessary_parents<'a>(&'a self, node_id: T) -> Option<impl std::iter::Iterator<Item=T> + 'a> {
+    pub fn necessary_parents<'a>(
+        &'a self,
+        node_id: T,
+    ) -> Option<impl std::iter::Iterator<Item = T> + 'a> {
         let node = match self.nodes.get(node_id) {
             Some(v) => v,
             None => return None,
         };
-        Some(node.parents.iter().filter_map(|(v, necessary)| if *necessary {
-            Some(v.clone())
-        } else {
-            None
-        }))
+        Some(
+            node.parents
+                .iter()
+                .filter_map(|(v, necessary)| if *necessary { Some(v.clone()) } else { None }),
+        )
     }
 
-    pub fn clean_parents<'a>(&'a self, node_id: T) -> Option<impl std::iter::Iterator<Item=T> + 'a> {
+    pub fn clean_parents<'a>(
+        &'a self,
+        node_id: T,
+    ) -> Option<impl std::iter::Iterator<Item = T> + 'a> {
         let node = match self.nodes.get(node_id) {
             Some(v) => v,
             None => return None,
         };
-        Some(node.parents.iter().filter_map(|(v, necessary)| if !*necessary {
-            Some(v.clone())
-        } else {
-            None
-        }))
+        Some(
+            node.parents
+                .iter()
+                .filter_map(|(v, necessary)| if !*necessary { Some(v.clone()) } else { None }),
+        )
     }
 
-    pub fn parents<'a>(&'a self, node_id: T) -> Option<impl std::iter::Iterator<Item=T> + 'a> {
+    pub fn parents<'a>(&'a self, node_id: T) -> Option<impl std::iter::Iterator<Item = T> + 'a> {
         let node = match self.nodes.get(node_id) {
             Some(v) => v,
             None => return None,
