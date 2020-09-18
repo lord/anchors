@@ -120,13 +120,28 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         self.nodes.remove(node_id);
     }
 
-    pub fn necessary_parents(&self, node_id: T) -> Vec<T> {
-        self.get_parents(node_id, true)
+    pub fn necessary_parents<'a>(&'a self, node_id: T) -> Option<impl std::iter::Iterator<Item=T> + 'a> {
+        let node = match self.nodes.get(node_id) {
+            Some(v) => v,
+            None => return None,
+        };
+        Some(node.parents.iter().filter_map(|(v, necessary)| if *necessary {
+            Some(v.clone())
+        } else {
+            None
+        }))
     }
 
-    #[allow(dead_code)]
-    pub fn clean_parents(&self, node_id: T) -> Vec<T> {
-        self.get_parents(node_id, false)
+    pub fn clean_parents<'a>(&'a self, node_id: T) -> Option<impl std::iter::Iterator<Item=T> + 'a> {
+        let node = match self.nodes.get(node_id) {
+            Some(v) => v,
+            None => return None,
+        };
+        Some(node.parents.iter().filter_map(|(v, necessary)| if !*necessary {
+            Some(v.clone())
+        } else {
+            None
+        }))
     }
 
     pub fn parents<'a>(&'a self, node_id: T) -> Option<impl std::iter::Iterator<Item=T> + 'a> {
@@ -148,7 +163,12 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
     }
 
     pub fn is_necessary(&self, node_id: T) -> bool {
-        self.necessary_parents(node_id).len() > 0
+        let node = match self.nodes.get(node_id) {
+            Some(v) => v,
+            None => return false,
+        };
+
+        node.parents.iter().any(|(v, necessary)| *necessary)
     }
 
     pub fn height(&self, node_id: T) -> usize {
@@ -179,18 +199,6 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         Ok(())
     }
 
-    #[allow(dead_code)]
-    fn get_parents(&self, node_id: T, necessary: bool) -> Vec<T> {
-        let node = match self.nodes.get(node_id) {
-            Some(v) => v,
-            None => return vec![],
-        };
-        node.parents
-            .iter()
-            .filter_map(|(id, nec)| if &necessary == nec { Some(*id) } else { None })
-            .collect()
-    }
-
     fn get_children(&self, node_id: T, necessary: bool) -> Vec<T> {
         let node = match self.nodes.get(node_id) {
             Some(v) => v,
@@ -215,6 +223,13 @@ mod test {
     use super::*;
     use slotmap::{DefaultKey, KeyData};
 
+    fn to_vec<I: std::iter::Iterator>(iter: Option<I>) -> Vec<I::Item> {
+        match iter {
+            None => vec![],
+            Some(iter) => iter.collect(),
+        }
+    }
+
     #[test]
     fn set_edge_updates_correctly() {
         let mut graph = MetadataGraph::<DefaultKey>::new();
@@ -222,13 +237,13 @@ mod test {
 
         assert_eq!(EdgeState::Dirty, graph.edge(k(1), k(2)));
         assert_eq!(EdgeState::Dirty, graph.edge(k(2), k(1)));
-        assert_eq!(empty, graph.necessary_parents(k(1)));
+        assert_eq!(empty, to_vec(graph.necessary_parents(k(1))));
         assert_eq!(empty, graph.necessary_children(k(1)));
-        assert_eq!(empty, graph.clean_parents(k(1)));
+        assert_eq!(empty, to_vec(graph.clean_parents(k(1))));
         assert_eq!(empty, graph.clean_children(k(1)));
-        assert_eq!(empty, graph.necessary_parents(k(2)));
+        assert_eq!(empty, to_vec(graph.necessary_parents(k(2))));
         assert_eq!(empty, graph.necessary_children(k(2)));
-        assert_eq!(empty, graph.clean_parents(k(2)));
+        assert_eq!(empty, to_vec(graph.clean_parents(k(2))));
         assert_eq!(empty, graph.clean_children(k(2)));
         assert_eq!(false, graph.is_necessary(k(1)));
         assert_eq!(false, graph.is_necessary(k(2)));
@@ -237,13 +252,13 @@ mod test {
 
         assert_eq!(EdgeState::Clean, graph.edge(k(1), k(2)));
         assert_eq!(EdgeState::Dirty, graph.edge(k(2), k(1)));
-        assert_eq!(empty, graph.necessary_parents(k(1)));
+        assert_eq!(empty, to_vec(graph.necessary_parents(k(1))));
         assert_eq!(empty, graph.necessary_children(k(1)));
-        assert_eq!(vec![k(2)], graph.clean_parents(k(1)));
+        assert_eq!(vec![k(2)], to_vec(graph.clean_parents(k(1))));
         assert_eq!(empty, graph.clean_children(k(1)));
-        assert_eq!(empty, graph.necessary_parents(k(2)));
+        assert_eq!(empty, to_vec(graph.necessary_parents(k(2))));
         assert_eq!(empty, graph.necessary_children(k(2)));
-        assert_eq!(empty, graph.clean_parents(k(2)));
+        assert_eq!(empty, to_vec(graph.clean_parents(k(2))));
         assert_eq!(vec![k(1)], graph.clean_children(k(2)));
         assert_eq!(false, graph.is_necessary(k(1)));
         assert_eq!(false, graph.is_necessary(k(2)));
@@ -252,13 +267,13 @@ mod test {
 
         assert_eq!(EdgeState::Necessary, graph.edge(k(1), k(2)));
         assert_eq!(EdgeState::Dirty, graph.edge(k(2), k(1)));
-        assert_eq!(vec![k(2)], graph.necessary_parents(k(1)));
+        assert_eq!(vec![k(2)], to_vec(graph.necessary_parents(k(1))));
         assert_eq!(empty, graph.necessary_children(k(1)));
-        assert_eq!(empty, graph.clean_parents(k(1)));
+        assert_eq!(empty, to_vec(graph.clean_parents(k(1))));
         assert_eq!(empty, graph.clean_children(k(1)));
-        assert_eq!(empty, graph.necessary_parents(k(2)));
+        assert_eq!(empty, to_vec(graph.necessary_parents(k(2))));
         assert_eq!(vec![k(1)], graph.necessary_children(k(2)));
-        assert_eq!(empty, graph.clean_parents(k(2)));
+        assert_eq!(empty, to_vec(graph.clean_parents(k(2))));
         assert_eq!(empty, graph.clean_children(k(2)));
         assert_eq!(true, graph.is_necessary(k(1)));
         assert_eq!(false, graph.is_necessary(k(2)));
@@ -267,13 +282,13 @@ mod test {
 
         assert_eq!(EdgeState::Dirty, graph.edge(k(1), k(2)));
         assert_eq!(EdgeState::Dirty, graph.edge(k(2), k(1)));
-        assert_eq!(empty, graph.necessary_parents(k(1)));
+        assert_eq!(empty, to_vec(graph.necessary_parents(k(1))));
         assert_eq!(empty, graph.necessary_children(k(1)));
-        assert_eq!(empty, graph.clean_parents(k(1)));
+        assert_eq!(empty, to_vec(graph.clean_parents(k(1))));
         assert_eq!(empty, graph.clean_children(k(1)));
-        assert_eq!(empty, graph.necessary_parents(k(2)));
+        assert_eq!(empty, to_vec(graph.necessary_parents(k(2))));
         assert_eq!(empty, graph.necessary_children(k(2)));
-        assert_eq!(empty, graph.clean_parents(k(2)));
+        assert_eq!(empty, to_vec(graph.clean_parents(k(2))));
         assert_eq!(empty, graph.clean_children(k(2)));
 
         assert_eq!(false, graph.is_necessary(k(1)));
