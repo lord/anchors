@@ -7,11 +7,10 @@ fn main() {
     for _ in 0..1000 {
         node = node.map(|val| val + 1);
     }
-    engine.mark_observed(&node);
     assert_eq!(engine.get(&node), 1000);
     let mut update_number = 0;
 
-    for _ in  0..1000 {
+    for _ in  0..50000 {
         update_number += 1;
         set_first_num.set(update_number);
         assert_eq!(engine.get(&node), update_number+1000);
