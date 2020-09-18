@@ -129,12 +129,12 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         self.get_parents(node_id, false)
     }
 
-    pub fn parents(&self, node_id: T) -> Vec<T> {
+    pub fn parents<'a>(&'a self, node_id: T) -> Option<impl std::iter::Iterator<Item=T> + 'a> {
         let node = match self.nodes.get(node_id) {
             Some(v) => v,
-            None => return vec![],
+            None => return None,
         };
-        node.parents.iter().map(|(v, _)| v.clone()).collect()
+        Some(node.parents.iter().map(|(v, _)| v.clone()))
     }
 
     #[allow(dead_code)]
