@@ -30,6 +30,9 @@ impl<T: Key> NodeQueue<T> {
     }
 
     pub fn needs_recalc(&mut self, node: T) {
+        if self.states.get(node.clone()) != Some(&NodeState::Ready) {
+            panic!("node queued for recalc, someone tried to mark it as NeedsRecalc");
+        }
         self.states.insert(node, NodeState::NeedsRecalc);
     }
 

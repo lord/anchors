@@ -126,7 +126,7 @@ impl Engine {
     pub fn stabilize<'a>(&'a mut self) {
         let dirty_marks = std::mem::replace(&mut *self.dirty_marks.borrow_mut(), Vec::new());
         for dirty in dirty_marks {
-            self.mark_node_dirty(dirty);
+            self.mark_dirty(dirty, false);
         }
 
         while let Some((height, this_node_num)) = self.to_recalculate.pop_next() {
@@ -186,12 +186,8 @@ impl Engine {
                 }
             }
             Poll::Updated => {
-                println!(
-                    "node updated: {}",
-                    this_anchor.borrow().debug_info().to_string()
-                );
                 // make sure all parents are marked as dirty, and observed parents are recalculated
-                self.mark_parents_dirty(this_node_num, true);
+                self.mark_dirty(this_node_num, true);
                 true
             }
             Poll::Unchanged => true,
@@ -215,39 +211,60 @@ impl Engine {
         }
     }
 
-    fn mark_node_dirty(&mut self, node_id: NodeNum) {
-        if self.graph.is_necessary(node_id) || self.nodes.borrow()[node_id].observed {
-            self.mark_node_for_recalculation(node_id);
+    // skip_self = true indicates output has *definitely* changed, but node has been recalculated
+    // skip_self = false indicates node has not yet been recalculated
+    fn mark_dirty(&mut self, node_id: NodeNum, skip_self: bool) {
+        let mut queue = if skip_self {
+            let res = match self.graph.parents(node_id) {
+                Some(vec) => vec.collect(),
+                None => vec![],
+            };
+            for item in &res {
+                // TODO now that we don't delete edges, this is called multiple times in some cases? maybee?? but if we only call it
+                // when the parent node was previously clean...seems like at worst we call it twice?
+                self.nodes
+                    .borrow()
+                    .get(*item)
+                    .unwrap()
+                    .anchor
+                    .borrow_mut()
+                    .dirty(&node_id);
+                // mark edges as dirty, since skip_self indicates this node's output actually
+                // changed
+                let res = self.graph.set_edge(node_id, *item, graph::EdgeState::Dirty);
+                self.panic_if_loop(res);
+            }
+            res
         } else {
-            self.to_recalculate.needs_recalc(node_id);
-            self.mark_parents_dirty(node_id, false);
+            vec![node_id]
         };
+
+        while let Some(next) = queue.pop() {
+            if self.graph.is_necessary(next) || self.nodes.borrow()[next].observed {
+                self.mark_node_for_recalculation(next);
+            } else if self.to_recalculate.state(next) == NodeState::Ready {
+                self.to_recalculate.needs_recalc(next);
+                if let Some(parents) = self.graph.parents(next) {
+                    queue.reserve(parents.size_hint().0);
+                    for parent in parents {
+                        self.nodes
+                            .borrow()
+                            .get(parent)
+                            .unwrap()
+                            .anchor
+                            .borrow_mut()
+                            .dirty(&next);
+                        queue.push(parent);
+                    }
+                }
+            };
+        }
     }
 
     fn mark_node_for_recalculation(&mut self, node_id: NodeNum) {
         if self.to_recalculate.state(node_id) != NodeState::PendingRecalc {
             self.to_recalculate
                 .queue_recalc(self.graph.height(node_id), node_id);
-        }
-    }
-
-    fn mark_parents_dirty(&mut self, node_id: NodeNum, definitely_changed: bool) {
-        for parent in self.graph.parents(node_id) {
-            self.to_recalculate.needs_recalc(node_id);
-            if definitely_changed {
-                let res = self
-                    .graph
-                    .set_edge(node_id, parent, graph::EdgeState::Dirty);
-                self.panic_if_loop(res);
-            }
-            self.nodes
-                .borrow()
-                .get(parent)
-                .unwrap()
-                .anchor
-                .borrow_mut()
-                .dirty(&node_id);
-            self.mark_node_dirty(parent);
         }
     }
 }

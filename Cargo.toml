@@ -8,6 +8,25 @@ license = "MIT"
 documentation = "https://docs.rs/anchors"
 repository = "https://github.com/lord/anchors"
 
+[lib]
+bench = false
+
 [dependencies]
 slotmap = { version = "0.4.0", features = ["unstable"] }
 petgraph = "0.5.1"
+
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "benchmarks"
+harness = false
+
+[profile.release]
+debug = true
+
+[[bin]]
+name = "linear_recalc"
+test = false
+bench = false
+
