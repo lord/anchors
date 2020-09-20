@@ -231,8 +231,11 @@ impl Engine {
                     .dirty(&node_id);
                 // mark edges as dirty, since skip_self indicates this node's output actually
                 // changed
-                let res = self.graph.set_edge(node_id, *item, graph::EdgeState::Dirty);
-                self.panic_if_loop(res);
+                // leave observed edges alone
+                if self.graph.edge(node_id, *item) == graph::EdgeState::Clean {
+                    let res = self.graph.set_edge(node_id, *item, graph::EdgeState::Dirty);
+                    self.panic_if_loop(res);
+                }
             }
             res
         } else {
@@ -402,22 +405,24 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
             self.pending_on_anchor_get = true;
             Poll::Pending
         } else {
-            let was_dirty =
+            let edge =
                 self.engine.graph.edge(anchor.data.num, self.node_num) == graph::EdgeState::Dirty;
-            if was_dirty {
-                let res = self.engine.graph.set_edge(
-                    anchor.data.num,
-                    self.node_num,
-                    if necessary && self_is_necessary {
-                        graph::EdgeState::Necessary
-                    } else {
-                        graph::EdgeState::Clean
-                    },
-                );
-                self.engine.panic_if_loop(res);
-                Poll::Updated // TODO FIX
-            } else {
-                Poll::Unchanged
+            match self.engine.graph.edge(anchor.data.num, self.node_num) {
+                graph::EdgeState::Dirty => {
+                    let res = self.engine.graph.set_edge(
+                        anchor.data.num,
+                        self.node_num,
+                        if necessary && self_is_necessary {
+                            graph::EdgeState::Necessary
+                        } else {
+                            graph::EdgeState::Clean
+                        },
+                    );
+                    self.engine.panic_if_loop(res);
+                    Poll::Updated
+                },
+                graph::EdgeState::Necessary => Poll::Updated,
+                graph::EdgeState::Clean => Poll::Unchanged,
             }
         }
     }
