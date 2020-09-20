@@ -405,8 +405,6 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
             self.pending_on_anchor_get = true;
             Poll::Pending
         } else {
-            let edge =
-                self.engine.graph.edge(anchor.data.num, self.node_num) == graph::EdgeState::Dirty;
             match self.engine.graph.edge(anchor.data.num, self.node_num) {
                 graph::EdgeState::Dirty => {
                     let res = self.engine.graph.set_edge(
