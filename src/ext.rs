@@ -18,10 +18,7 @@ pub trait AnchorExt<E: Engine>: Sized {
     where
         Out: 'static,
         F: 'static,
-        refmap::RefMap<Self::Target, F>: AnchorInner<E, Output = Out>,
-    {
-        unimplemented!()
-    }
+        refmap::RefMap<Self::Target, F>: AnchorInner<E, Output = Out>;
 
     fn then<F, Out>(self, f: F) -> Anchor<Out, E>
     where
@@ -33,10 +30,7 @@ pub trait AnchorExt<E: Engine>: Sized {
     where
         Out: 'static,
         F: 'static,
-        cutoff::Cutoff<Self::Target, F>: AnchorInner<E, Output = Out>,
-    {
-        unimplemented!()
-    }
+        cutoff::Cutoff<Self::Target, F>: AnchorInner<E, Output = Out>;
 }
 
 pub trait AnchorSplit<E: Engine>: Sized {
@@ -168,6 +162,34 @@ macro_rules! impl_tuple_ext {
                     f_anchor: None,
                     location: Location::caller(),
                     lhs_stale: true,
+                })
+            }
+
+            #[track_caller]
+            fn refmap<F, Out>(self, f: F) -> Anchor<Out, E>
+            where
+                Out: 'static,
+                F: 'static,
+                refmap::RefMap<Self::Target, F>: AnchorInner<E, Output = Out>,
+            {
+                E::mount(refmap::RefMap {
+                    anchors: ($(self.$num.clone(),)+),
+                    f,
+                    location: Location::caller(),
+                })
+            }
+
+            #[track_caller]
+            fn cutoff<F, Out>(self, f: F) -> Anchor<Out, E>
+            where
+                Out: 'static,
+                F: 'static,
+                cutoff::Cutoff<Self::Target, F>: AnchorInner<E, Output = Out>,
+            {
+                E::mount(cutoff::Cutoff {
+                    anchors: ($(self.$num.clone(),)+),
+                    f,
+                    location: Location::caller(),
                 })
             }
         }
