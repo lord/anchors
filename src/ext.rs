@@ -66,7 +66,8 @@ pub trait AnchorExt<E: Engine>: Sized {
 
     /// Creates an Anchor that maps some input reference to some output reference.
     /// Performance is critical here: `f` will always be recalled any time any downstream node
-    /// requests the value of this Anchor. It's also critical to note that due to constraints
+    /// requests the value of this Anchor, *not* just when an input value changes.
+    /// It's also critical to note that due to constraints
     /// with Rust's lifetime system, these output references can not be owned values, and must
     /// exactly as long as the input reference.
     /// For example, you can lookup a particular value inside a tuple without cloning:
