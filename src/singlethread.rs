@@ -116,7 +116,9 @@ impl Engine {
             for child in &necessary_children {
                 // TODO this may need to be dirty in some cases?? may want to better track if a value has been
                 // changed or not
-                let res = self.graph.set_edge(*child, next_id, graph::EdgeState::Clean);
+                let res = self
+                    .graph
+                    .set_edge(*child, next_id, graph::EdgeState::Clean);
                 self.panic_if_loop(res);
             }
             queue.append(&mut necessary_children);
@@ -205,13 +207,7 @@ impl Engine {
     }
 
     pub fn check_observed(&self, id: NodeNum) -> ObservedState {
-        if self
-                .nodes
-                .borrow()
-                .get(id)
-                .as_ref()
-                .unwrap()
-                .observed {
+        if self.nodes.borrow().get(id).as_ref().unwrap().observed {
             return ObservedState::Observed;
         }
         if self.graph.is_necessary(id) {
@@ -454,7 +450,8 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
     ) -> Poll {
         let height_increases =
             self.engine.graph.height(anchor.data.num) < self.engine.graph.height(self.node_num);
-        let self_is_necessary = self.engine.check_observed(self.node_num) != ObservedState::Unnecessary;
+        let self_is_necessary =
+            self.engine.check_observed(self.node_num) != ObservedState::Unnecessary;
         if !height_increases {
             let res = self
                 .engine

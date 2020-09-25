@@ -222,43 +222,85 @@ mod test {
 
         let mut engine = crate::singlethread::Engine::new();
         let (v1, _v1_setter) = crate::var::Var::new(1usize);
-        let a = v1.map(|num1| {
-            *num1 + 1
-        });
-        let b = a.map(|num1| {
-            *num1 + 2
-        });
-        let c = b.map(|num1| {
-            *num1 + 3
-        });
+        let a = v1.map(|num1| *num1 + 1);
+        let b = a.map(|num1| *num1 + 2);
+        let c = b.map(|num1| *num1 + 3);
         engine.mark_observed(&a);
         engine.mark_observed(&c);
 
-        assert_eq!(ObservedState::Unnecessary, engine.check_observed(v1.data.token()));
-        assert_eq!(ObservedState::Observed, engine.check_observed(a.data.token()));
-        assert_eq!(ObservedState::Unnecessary, engine.check_observed(b.data.token()));
-        assert_eq!(ObservedState::Observed, engine.check_observed(c.data.token()));
+        assert_eq!(
+            ObservedState::Unnecessary,
+            engine.check_observed(v1.data.token())
+        );
+        assert_eq!(
+            ObservedState::Observed,
+            engine.check_observed(a.data.token())
+        );
+        assert_eq!(
+            ObservedState::Unnecessary,
+            engine.check_observed(b.data.token())
+        );
+        assert_eq!(
+            ObservedState::Observed,
+            engine.check_observed(c.data.token())
+        );
 
         engine.stabilize();
 
-        assert_eq!(ObservedState::Necessary, engine.check_observed(v1.data.token()));
-        assert_eq!(ObservedState::Observed, engine.check_observed(a.data.token()));
-        assert_eq!(ObservedState::Necessary, engine.check_observed(b.data.token()));
-        assert_eq!(ObservedState::Observed, engine.check_observed(c.data.token()));
+        assert_eq!(
+            ObservedState::Necessary,
+            engine.check_observed(v1.data.token())
+        );
+        assert_eq!(
+            ObservedState::Observed,
+            engine.check_observed(a.data.token())
+        );
+        assert_eq!(
+            ObservedState::Necessary,
+            engine.check_observed(b.data.token())
+        );
+        assert_eq!(
+            ObservedState::Observed,
+            engine.check_observed(c.data.token())
+        );
 
         engine.mark_unobserved(&c);
 
-        assert_eq!(ObservedState::Necessary, engine.check_observed(v1.data.token()));
-        assert_eq!(ObservedState::Observed, engine.check_observed(a.data.token()));
-        assert_eq!(ObservedState::Unnecessary, engine.check_observed(b.data.token()));
-        assert_eq!(ObservedState::Unnecessary, engine.check_observed(c.data.token()));
+        assert_eq!(
+            ObservedState::Necessary,
+            engine.check_observed(v1.data.token())
+        );
+        assert_eq!(
+            ObservedState::Observed,
+            engine.check_observed(a.data.token())
+        );
+        assert_eq!(
+            ObservedState::Unnecessary,
+            engine.check_observed(b.data.token())
+        );
+        assert_eq!(
+            ObservedState::Unnecessary,
+            engine.check_observed(c.data.token())
+        );
 
         engine.mark_unobserved(&a);
 
-        assert_eq!(ObservedState::Unnecessary, engine.check_observed(v1.data.token()));
-        assert_eq!(ObservedState::Unnecessary, engine.check_observed(a.data.token()));
-        assert_eq!(ObservedState::Unnecessary, engine.check_observed(b.data.token()));
-        assert_eq!(ObservedState::Unnecessary, engine.check_observed(c.data.token()));
+        assert_eq!(
+            ObservedState::Unnecessary,
+            engine.check_observed(v1.data.token())
+        );
+        assert_eq!(
+            ObservedState::Unnecessary,
+            engine.check_observed(a.data.token())
+        );
+        assert_eq!(
+            ObservedState::Unnecessary,
+            engine.check_observed(b.data.token())
+        );
+        assert_eq!(
+            ObservedState::Unnecessary,
+            engine.check_observed(c.data.token())
+        );
     }
 
     #[test]
