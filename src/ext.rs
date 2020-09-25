@@ -28,7 +28,7 @@ mod then;
 pub trait AnchorExt<E: Engine>: Sized {
     type Target;
 
-    /// Creates an Anchor that maps the a number of incremental input values to some output value.
+    /// Creates an Anchor that maps a number of incremental input values to some output value.
     /// The function `f` accepts inputs as references, and must return an owned value.
     /// `f` will always be recalled any time any input value changes.
     /// For example, you can add two numbers together with `map`:
@@ -52,6 +52,36 @@ pub trait AnchorExt<E: Engine>: Sized {
         F: 'static,
         map::Map<Self::Target, F, Out>: AnchorInner<E, Output = Out>;
 
+    /// Creates an Anchor that maps a number of incremental input values to some output Anchor.
+    /// With `then`, your computation graph can dynamically select an Anchor to recalculate based
+    /// on some other incremental computation..
+    /// The function `f` accepts inputs as references, and must return an owned `Anchor`.
+    /// `f` will always be recalled any time any input value changes.
+    ///
+    /// For example, you can select which of two additions gets calculated:
+    ///
+    /// ```
+    /// use anchors::{singlethread::Engine, Anchor, Constant, AnchorExt};
+    /// let mut engine = Engine::new();
+    /// let decision = Constant::new(true);
+    /// let num = Constant::new(1);
+    ///
+    /// // because of how we're using the `then` below, only one of these two
+    /// // additions will actually be run
+    /// let a = num.map(|num| *num + 1);
+    /// let b = num.map(|num| *num + 2);
+    ///
+    /// // types have been added for clarity but are optional:
+    /// let res: Anchor<usize, Engine> = decision.then(move |decision: &bool| {
+    ///     if *decision {
+    ///         a.clone()
+    ///     } else {
+    ///         b.clone()
+    ///     }
+    /// });
+    ///
+    /// assert_eq!(2, engine.get(&res));
+    /// ```
     fn then<F, Out>(self, f: F) -> Anchor<Out, E>
     where
         F: 'static,
