@@ -166,11 +166,17 @@ impl Engine {
                 "   --   "
             };
             let state = match self.to_recalculate.state(node_id) {
-                NodeState::NeedsRecalc =>   "NeedsRecalc  ",
+                NodeState::NeedsRecalc => "NeedsRecalc  ",
                 NodeState::PendingRecalc => "PendingRecalc",
-                NodeState::Ready =>         "Ready        ",
+                NodeState::Ready => "Ready        ",
             };
-            debug += &format!("{:>80}  {}  {}  {}\n", node.debug_info.to_string(), necessary, observed, state);
+            debug += &format!(
+                "{:>80}  {}  {}  {}\n",
+                node.debug_info.to_string(),
+                necessary,
+                observed,
+                state
+            );
         }
         debug
     }
@@ -430,9 +436,10 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
             self.engine.mark_node_for_recalculation(anchor.data.num);
             if necessary && self_is_necessary {
                 let res = self.engine.graph.set_edge(
-                                        anchor.data.num,
-                                        self.node_num,
-                                        graph::EdgeState::Necessary);
+                    anchor.data.num,
+                    self.node_num,
+                    graph::EdgeState::Necessary,
+                );
                 self.engine.panic_if_loop(res);
             }
             Poll::Pending
@@ -453,7 +460,7 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
                     );
                     self.engine.panic_if_loop(res);
                     Poll::Updated
-                },
+                }
                 graph::EdgeState::Necessary => Poll::Updated,
                 graph::EdgeState::Clean => Poll::Unchanged,
             }
