@@ -120,6 +120,7 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         self.nodes.remove(node_id);
     }
 
+    #[allow(dead_code)]
     pub fn necessary_parents<'a>(
         &'a self,
         node_id: T,
@@ -135,6 +136,7 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         )
     }
 
+    #[allow(dead_code)]
     pub fn clean_parents<'a>(
         &'a self,
         node_id: T,
@@ -174,7 +176,7 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
             None => return false,
         };
 
-        node.parents.iter().any(|(v, necessary)| *necessary)
+        node.parents.iter().any(|(_v, necessary)| *necessary)
     }
 
     pub fn height(&self, node_id: T) -> usize {
