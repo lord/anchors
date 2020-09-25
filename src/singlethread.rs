@@ -428,6 +428,13 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
         if self.engine.to_recalculate.state(anchor.data.num) != NodeState::Ready {
             self.pending_on_anchor_get = true;
             self.engine.mark_node_for_recalculation(anchor.data.num);
+            if necessary && self_is_necessary {
+                let res = self.engine.graph.set_edge(
+                                        anchor.data.num,
+                                        self.node_num,
+                                        graph::EdgeState::Necessary);
+                self.engine.panic_if_loop(res);
+            }
             Poll::Pending
         } else if !height_increases {
             self.pending_on_anchor_get = true;

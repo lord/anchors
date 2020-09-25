@@ -23,7 +23,6 @@ macro_rules! impl_tuple_map {
         {
             type Output = Out;
             fn dirty(&mut self, _edge:  &<E::AnchorHandle as crate::AnchorHandle>::Token) {
-                println!("map dirtied");
                 self.output_stale = true;
             }
             fn poll_updated<G: UpdateContext<Engine=E>>(
