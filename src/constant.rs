@@ -1,6 +1,7 @@
 use crate::{Anchor, AnchorHandle, AnchorInner, Engine, OutputContext, Poll, UpdateContext};
 use std::panic::Location;
 
+/// An Anchor type for immutable values.
 pub struct Constant<T> {
     val: T,
     first_poll: bool,
@@ -8,6 +9,7 @@ pub struct Constant<T> {
 }
 
 impl<T: 'static> Constant<T> {
+    /// Creates a new Constant Anchor from some value.
     #[track_caller]
     pub fn new<E: Engine>(val: T) -> Anchor<T, E> {
         E::mount(Self {

@@ -13,13 +13,30 @@ mod var;
 pub use constant::Constant;
 pub use var::{Var, VarSetter};
 
+/// Indicates whether a value is ready for reading, and if it is, whether it's changed
+/// since the last read.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Poll {
+    /// Indicates the polled value is ready for reading. Either this is the first read,
+    /// or the value has changed since the last read.
     Updated,
+
+    /// Indicates the polled value is ready for reading. This is not the first read, and
+    /// the value is unchanged since the previous read.
     Unchanged,
+
+    /// Indicates the polled value is not ready for reading, but has been queued for recalculation.
+    /// The output value will eventually switch to Updated or Unchanged.
     Pending,
 }
 
+/// The main struct of the Anchors library. Represents a single value on the recomputation graph.
+///
+/// This doesn't contain the particular Anchor implementation directly, but instead contains an
+/// engine-specific `AnchorHandle` which allows the recalculation engine to identify which
+/// internal recomputation graph node this corresponds to. You should rarely create Anchors yourself;
+/// instead use one of the built-in functions like `Var::new` to create one, or create derivative Anchors
+/// with one of the `AnchorExt` methods.
 pub struct Anchor<O, E: Engine + ?Sized> {
     pub data: E::AnchorHandle,
     phantom: PhantomData<O>,
@@ -50,8 +67,14 @@ impl<O, E: Engine> PartialEq for Anchor<O, E> {
 }
 impl<O, E: Engine> Eq for Anchor<O, E> {}
 
+/// A reference to a particular `AnchorInner`. Each engine implements its own.
 pub trait AnchorHandle: Sized + Clone {
     type Token: Sized + Clone + Copy + PartialEq + Eq + std::hash::Hash;
+
+    /// Returns a Copyable, comparable, hashable ID corresponding to this AnchorHandle.
+    /// Some engines may garbage collect an AnchorInner when no more AnchorHandles pointing
+    /// to it exist, which means it's possible to have a Token pointing to a since-deleted
+    /// Anchor.
     fn token(&self) -> Self::Token;
 }
 
@@ -62,6 +85,7 @@ pub trait Engine: 'static {
     fn mount<I: AnchorInner<Self> + 'static>(inner: I) -> Anchor<I::Output, Self>;
 }
 
+/// Allows a node with non-Anchors inputs to manually mark itself as dirty. Each engine implements its own.
 pub trait DirtyHandle {
     fn mark_dirty(&self);
 }

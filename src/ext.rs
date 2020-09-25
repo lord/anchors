@@ -6,6 +6,24 @@ mod map;
 mod refmap;
 mod then;
 
+/// A trait automatically implemented for all Anchors.
+/// You'll likely want to `use` this trait in most of your programs, since it can create many
+/// useful Anchors that derive their output incrementally from some other Anchors.
+///
+/// AnchorExt is also implemented for all tuples of up to 9 Anchor references. For example:
+///
+/// ```
+/// use anchors::{singlethread::Engine, Constant, AnchorExt};
+/// let mut engine = Engine::new();
+/// let a = Constant::new(1);
+/// let b = Constant::new(2);
+/// let c = Constant::new(3);
+///
+/// // here we use AnchorExt to map three values together:
+/// let res = (&a, &b, &c).map(|a_val, b_val, c_val| *a_val+*b_val+*c_val);
+///
+/// assert_eq!(6, engine.get(&res));
+/// ```
 pub trait AnchorExt<E: Engine>: Sized {
     type Target;
     fn map<F, Out>(self, f: F) -> Anchor<Out, E>
