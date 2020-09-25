@@ -40,7 +40,7 @@ pub trait AnchorExt<E: Engine>: Sized {
     /// let b = Constant::new(2);
     ///
     /// // add the two numbers together; types have been added for clarity but are optional:
-    /// let res: Anchor<usize, Engine> = (&a, &b).map(|a_val: &usize, b_val: &usize| {
+    /// let res: Anchor<usize, Engine> = (&a, &b).map(|a_val: &usize, b_val: &usize| -> usize {
     ///    *a_val+*b_val
     /// });
     ///
@@ -51,12 +51,6 @@ pub trait AnchorExt<E: Engine>: Sized {
         Out: 'static,
         F: 'static,
         map::Map<Self::Target, F, Out>: AnchorInner<E, Output = Out>;
-
-    fn refmap<F, Out>(self, _f: F) -> Anchor<Out, E>
-    where
-        Out: 'static,
-        F: 'static,
-        refmap::RefMap<Self::Target, F>: AnchorInner<E, Output = Out>;
 
     fn then<F, Out>(self, f: F) -> Anchor<Out, E>
     where
@@ -69,6 +63,37 @@ pub trait AnchorExt<E: Engine>: Sized {
         Out: 'static,
         F: 'static,
         cutoff::Cutoff<Self::Target, F>: AnchorInner<E, Output = Out>;
+
+    /// Creates an Anchor that maps some input reference to some output reference.
+    /// Performance is critical here: `f` will always be recalled any time any downstream node
+    /// requests the value of this Anchor. It's also critical to note that due to constraints
+    /// with Rust's lifetime system, these output references can not be owned values, and must
+    /// exactly as long as the input reference.
+    /// For example, you can lookup a particular value inside a tuple without cloning:
+    ///
+    /// ```
+    /// use anchors::{singlethread::Engine, Anchor, Constant, AnchorExt};
+    /// struct CantClone {val: usize};
+    /// let mut engine = Engine::new();
+    /// let tuple = Constant::new((CantClone{val: 1}, CantClone{val: 2}));
+    ///
+    /// // lookup the first value inside the tuple; types have been added for clarity but are optional:
+    /// let res: Anchor<CantClone, Engine> = tuple.refmap(|tuple: &(CantClone, CantClone)| -> &CantClone {
+    ///    &tuple.0
+    /// });
+    ///
+    /// // check if the cantclone value is correct:
+    /// let is_one = res.map(|tuple: &CantClone| -> bool {
+    ///    tuple.val == 1
+    /// });
+    ///
+    /// assert_eq!(true, engine.get(&is_one));
+    /// ```
+    fn refmap<F, Out>(self, _f: F) -> Anchor<Out, E>
+    where
+        Out: 'static,
+        F: 'static,
+        refmap::RefMap<Self::Target, F>: AnchorInner<E, Output = Out>;
 }
 
 pub trait AnchorSplit<E: Engine>: Sized {
