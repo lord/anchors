@@ -1,3 +1,11 @@
+//! Singlethread is Anchors' default execution engine. It's a single threaded engine capable of both
+//! Adapton-style pull updates and — if `mark_observed` and `mark_unobserved` are used,
+//! Incremental-style push updates.
+//!
+//! As of Semptember 2020, execution overhead per-node sits at around 100ns on this author's Macbook
+//! Air, likely somewhat more if single node has a significant number of parents or children. Hopefully
+//! this will significantly improve over the coming months.
+
 use crate::nodequeue::{NodeQueue, NodeState};
 use crate::refcounter::RefCounter;
 use crate::{graph, Anchor, AnchorInner, OutputContext, Poll, UpdateContext};
@@ -11,15 +19,30 @@ thread_local! {
     static DEFAULT_MOUNTER: RefCell<Option<Mounter>> = RefCell::new(None);
 }
 
+/// Indicates whether the node is a part of some observed calculation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ObservedState {
+    /// The node has been marked as observed directly via `mark_observed`.
     Observed,
+
+    /// The node is not marked as observed directly.
+    /// However, the node has some descendent that is Observed, and this node has
+    /// been recalculated since that descendent become Observed.
     Necessary,
+
+    /// The node is not marked as observed directly.
+    /// Additionally, this node either has no Observed descendent, or the chain linking
+    /// this node to that Observed descendent has not been recalculated since that
+    /// dencendent become observed.
     Unnecessary,
 }
 
-slotmap::new_key_type! { pub struct NodeNum; }
+slotmap::new_key_type! {
+    /// The AnchorHandle token of the Singlethread engine.
+    pub struct NodeNum;
+}
 
+/// The main execution engine of Singlethread.
 pub struct Engine {
     // TODO store Nodes on heap directly?? maybe try for Rc<RefCell<SlotMap>> now
     nodes: Rc<RefCell<SlotMap<NodeNum, Node>>>,
@@ -66,10 +89,12 @@ struct Node {
 }
 
 impl Engine {
+    /// Creates a new Engine with maximum height 256.
     pub fn new() -> Self {
         Self::new_with_max_height(256)
     }
 
+    /// Creates a new Engine with a custom maximum height.
     pub fn new_with_max_height(max_height: usize) -> Self {
         let refcounter = RefCounter::new();
         let nodes = Rc::new(RefCell::new(SlotMap::with_key()));
@@ -87,6 +112,10 @@ impl Engine {
         }
     }
 
+    /// Marks an Anchor as observed. All observed nodes will always be brought up-to-date
+    /// when *any* Anchor in the graph is retrieved. If you get an output value fairly
+    /// often, it's best to mark it as Observed so that Anchors can calculate its
+    /// dependencies faster.
     pub fn mark_observed<O: 'static>(&mut self, anchor: &Anchor<O, Engine>) {
         self.nodes
             .borrow_mut()
@@ -98,6 +127,9 @@ impl Engine {
         }
     }
 
+    /// Marks an Anchor as unobserved. If the `anchor` has parents that are necessary
+    /// because `anchor` was previously observed, those parents will be unmarked as
+    /// necessary.
     pub fn mark_unobserved<O: 'static>(&mut self, anchor: &Anchor<O, Engine>) {
         self.nodes
             .borrow_mut()
@@ -126,6 +158,8 @@ impl Engine {
         }
     }
 
+    /// Retrieves the value of an Anchor, recalculating dependencies as necessary to get the
+    /// latest value.
     pub fn get<'out, O: Clone + 'static>(&mut self, anchor: &Anchor<O, Engine>) -> O {
         // stabilize once before, since the stabilization process may mark our requested node
         // as dirty
@@ -148,13 +182,15 @@ impl Engine {
             .clone()
     }
 
-    pub fn update_dirty_marks(&mut self) {
+    pub(crate) fn update_dirty_marks(&mut self) {
         let dirty_marks = std::mem::replace(&mut *self.dirty_marks.borrow_mut(), Vec::new());
         for dirty in dirty_marks {
             self.mark_dirty(dirty, false);
         }
     }
 
+    /// Ensure any Observed nodes are up-to-date, recalculating dependencies as necessary. You
+    /// should rarely need to call this yourself; `Engine::get` calls it automatically.
     pub fn stabilize<'a>(&'a mut self) {
         self.update_dirty_marks();
 
@@ -176,6 +212,7 @@ impl Engine {
         self.garbage_collect();
     }
 
+    /// Returns a debug string containing the current state of the recomputation graph.
     pub fn debug_state(&self) -> String {
         let nodes = self.nodes.borrow();
         let mut debug = "".to_string();
@@ -206,6 +243,7 @@ impl Engine {
         debug
     }
 
+    /// Returns whether an Anchor is Observed, Necessary, or Unnecessary.
     pub fn check_observed(&self, id: NodeNum) -> ObservedState {
         if self.nodes.borrow().get(id).as_ref().unwrap().observed {
             return ObservedState::Observed;
@@ -342,6 +380,7 @@ impl Engine {
     }
 }
 
+/// Singlethread's implementation of Anchors' `AnchorHandle`, the engine-specific handle that sits inside an `Anchor`.
 #[derive(Debug)]
 pub struct AnchorHandle {
     num: NodeNum,
@@ -370,6 +409,7 @@ impl crate::AnchorHandle for AnchorHandle {
     }
 }
 
+/// Singlethread's implementation of Anchors' `DirtyHandle`, which allows a node with non-Anchors inputs to manually mark itself as dirty.
 #[derive(Debug, Clone)]
 pub struct DirtyHandle {
     num: NodeNum,

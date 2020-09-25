@@ -4,6 +4,7 @@ use super::{
 use std::cell::RefCell;
 use std::rc::Rc;
 
+/// An Anchor type for values that are mutated by calling a setter function from outside of the Anchors recomputation graph.
 pub struct Var<T, H> {
     inner: Rc<RefCell<VarInner<T, H>>>,
     my_val: T,
@@ -15,6 +16,7 @@ struct VarInner<T, H> {
     val: Option<T>,
 }
 
+/// A setter that can update values inside an associated `Var`.
 pub struct VarSetter<T, H> {
     inner: Rc<RefCell<VarInner<T, H>>>,
 }
@@ -28,6 +30,7 @@ impl<T, H> Clone for VarSetter<T, H> {
 }
 
 impl<T: 'static, H: DirtyHandle + 'static> Var<T, H> {
+    /// Creates a new Var Anchor, returning a tuple of the new Anchor and its setter.
     pub fn new<E: Engine<DirtyHandle = H>>(val: T) -> (Anchor<T, E>, VarSetter<T, H>) {
         let inner = Rc::new(RefCell::new(VarInner {
             dirty_handle: None,
@@ -41,6 +44,8 @@ impl<T: 'static, H: DirtyHandle + 'static> Var<T, H> {
     }
 }
 impl<T: 'static, H: DirtyHandle> VarSetter<T, H> {
+    /// Updates the value inside the Var, and indicates to the recomputation graph that
+    /// the value has changed.
     pub fn set(&self, val: T) {
         let mut inner = self.inner.borrow_mut();
         inner.val = Some(val);
