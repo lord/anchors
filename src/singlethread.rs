@@ -123,11 +123,15 @@ impl Engine {
             .clone()
     }
 
-    pub fn stabilize<'a>(&'a mut self) {
+    pub fn update_dirty_marks(&mut self) {
         let dirty_marks = std::mem::replace(&mut *self.dirty_marks.borrow_mut(), Vec::new());
         for dirty in dirty_marks {
             self.mark_dirty(dirty, false);
         }
+    }
+
+    pub fn stabilize<'a>(&'a mut self) {
+        self.update_dirty_marks();
 
         while let Some((height, this_node_num)) = self.to_recalculate.pop_next() {
             let calculation_complete = if height == self.graph.height(this_node_num) {
@@ -145,6 +149,30 @@ impl Engine {
         }
 
         self.garbage_collect();
+    }
+
+    pub fn debug_state(&self) -> String {
+        let nodes = self.nodes.borrow();
+        let mut debug = "".to_string();
+        for (node_id, node) in nodes.iter() {
+            let necessary = if self.graph.is_necessary(node_id) {
+                "necessary"
+            } else {
+                "   --    "
+            };
+            let observed = if node.observed {
+                "observed"
+            } else {
+                "   --   "
+            };
+            let state = match self.to_recalculate.state(node_id) {
+                NodeState::NeedsRecalc =>   "NeedsRecalc  ",
+                NodeState::PendingRecalc => "PendingRecalc",
+                NodeState::Ready =>         "Ready        ",
+            };
+            debug += &format!("{:>80}  {}  {}  {}\n", node.debug_info.to_string(), necessary, observed, state);
+        }
+        debug
     }
 
     fn garbage_collect(&mut self) {
