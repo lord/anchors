@@ -10,22 +10,42 @@ mod then;
 /// You'll likely want to `use` this trait in most of your programs, since it can create many
 /// useful Anchors that derive their output incrementally from some other Anchors.
 ///
-/// AnchorExt is also implemented for all tuples of up to 9 Anchor references. For example:
+/// AnchorExt is also implemented for all tuples of up to 9 Anchor references. For example, you can combine three
+/// values incrementally into a tuple with:
 ///
 /// ```
 /// use anchors::{singlethread::Engine, Constant, AnchorExt};
 /// let mut engine = Engine::new();
 /// let a = Constant::new(1);
 /// let b = Constant::new(2);
-/// let c = Constant::new(3);
+/// let c = Constant::new("hello");
 ///
 /// // here we use AnchorExt to map three values together:
-/// let res = (&a, &b, &c).map(|a_val, b_val, c_val| *a_val+*b_val+*c_val);
+/// let res = (&a, &b, &c).map(|a_val, b_val, c_val| (*a_val, *b_val, *c_val));
 ///
-/// assert_eq!(6, engine.get(&res));
+/// assert_eq!((1, 2, "hello"), engine.get(&res));
 /// ```
 pub trait AnchorExt<E: Engine>: Sized {
     type Target;
+
+    /// Creates an Anchor that maps the a number of incremental input values to some output value.
+    /// The function `f` accepts inputs as references, and must return an owned value.
+    /// `f` will always be recalled any time any input value changes.
+    /// For example, you can add two numbers together with `map`:
+    ///
+    /// ```
+    /// use anchors::{singlethread::Engine, Anchor, Constant, AnchorExt};
+    /// let mut engine = Engine::new();
+    /// let a = Constant::new(1);
+    /// let b = Constant::new(2);
+    ///
+    /// // add the two numbers together; types have been added for clarity but are optional:
+    /// let res: Anchor<usize, Engine> = (&a, &b).map(|a_val: &usize, b_val: &usize| {
+    ///    *a_val+*b_val
+    /// });
+    ///
+    /// assert_eq!(3, engine.get(&res));
+    /// ```
     fn map<F, Out>(self, f: F) -> Anchor<Out, E>
     where
         Out: 'static,
