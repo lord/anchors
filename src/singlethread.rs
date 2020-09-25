@@ -11,6 +11,13 @@ thread_local! {
     static DEFAULT_MOUNTER: RefCell<Option<Mounter>> = RefCell::new(None);
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ObservedState {
+    Observed,
+    Necessary,
+    Unnecessary,
+}
+
 slotmap::new_key_type! { pub struct NodeNum; }
 
 pub struct Engine {
@@ -97,8 +104,24 @@ impl Engine {
             .get_mut(anchor.data.num)
             .unwrap()
             .observed = false;
-        // TODO remove from calculation queue if necessary?
-        // TODO need to unobserve child nodes here
+
+        let mut queue = vec![anchor.data.num];
+
+        while let Some(next_id) = queue.pop() {
+            if self.graph.is_necessary(next_id) {
+                // we have another parent still observed, so skip this
+                continue;
+            }
+            let mut necessary_children = self.graph.necessary_children(next_id);
+            for child in &necessary_children {
+                // TODO this may need to be dirty in some cases?? may want to better track if a value has been
+                // changed or not
+                let res = self.graph.set_edge(*child, next_id, graph::EdgeState::Clean);
+                self.panic_if_loop(res);
+            }
+            queue.append(&mut necessary_children);
+            // TODO remove from calculation queue if necessary?
+        }
     }
 
     pub fn get<'out, O: Clone + 'static>(&mut self, anchor: &Anchor<O, Engine>) -> O {
@@ -179,6 +202,23 @@ impl Engine {
             );
         }
         debug
+    }
+
+    pub fn check_observed(&self, id: NodeNum) -> ObservedState {
+        if self
+                .nodes
+                .borrow()
+                .get(id)
+                .as_ref()
+                .unwrap()
+                .observed {
+            return ObservedState::Observed;
+        }
+        if self.graph.is_necessary(id) {
+            ObservedState::Necessary
+        } else {
+            ObservedState::Unnecessary
+        }
     }
 
     fn garbage_collect(&mut self) {
@@ -414,15 +454,7 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
     ) -> Poll {
         let height_increases =
             self.engine.graph.height(anchor.data.num) < self.engine.graph.height(self.node_num);
-        let self_is_necessary = self.engine.graph.is_necessary(self.node_num)
-            || self
-                .engine
-                .nodes
-                .borrow()
-                .get(self.node_num)
-                .as_ref()
-                .unwrap()
-                .observed;
+        let self_is_necessary = self.engine.check_observed(self.node_num) != ObservedState::Unnecessary;
         if !height_increases {
             let res = self
                 .engine
