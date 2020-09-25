@@ -108,7 +108,7 @@ impl Engine {
         let mut queue = vec![anchor.data.num];
 
         while let Some(next_id) = queue.pop() {
-            if self.graph.is_necessary(next_id) {
+            if self.check_observed(next_id) != ObservedState::Unnecessary {
                 // we have another parent still observed, so skip this
                 continue;
             }
