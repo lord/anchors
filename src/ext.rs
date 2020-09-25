@@ -69,7 +69,7 @@ pub trait AnchorExt<E: Engine>: Sized {
     /// requests the value of this Anchor, *not* just when an input value changes.
     /// It's also critical to note that due to constraints
     /// with Rust's lifetime system, these output references can not be owned values, and must
-    /// exactly as long as the input reference.
+    /// live exactly as long as the input reference.
     /// For example, you can lookup a particular value inside a tuple without cloning:
     ///
     /// ```
