@@ -88,6 +88,42 @@ pub trait AnchorExt<E: Engine>: Sized {
         Out: 'static,
         then::Then<Self::Target, Out, F, E>: AnchorInner<E, Output = Out>;
 
+    /// Creates an Anchor that outputs its input. However, even if a value changes
+    /// you may not want to recompute downstream nodes unless the value changes substantially.
+    /// The function `f` accepts inputs as references, and must return true if Anchors that derive
+    /// values from this cutoff should recalculate, or false if derivative Anchors should not recalculate.
+    /// If this is the first calculation, `f` will be called, but return values of `false` will be ignored.
+    /// `f` will always be recalled any time the input value changes.
+    /// For example, you can only perform an addition if an input changes by more than 10:
+    ///
+    /// ```
+    /// use anchors::{singlethread::Engine, Anchor, Var, AnchorExt};
+    /// let mut engine = Engine::new();
+    /// let (num, set_num) = Var::new(1i32);
+    /// let cutoff = {
+    ///     let mut old_num_opt: Option<i32> = None;
+    ///     num.cutoff(move |num| {
+    ///         if let Some(old_num) = old_num_opt {
+    ///             if (old_num - *num).abs() < 10 {
+    ///                 return false;
+    ///             }
+    ///         }
+    ///         old_num_opt = Some(*num);
+    ///         true
+    ///     })
+    /// };
+    /// let res = cutoff.map(|cutoff| *cutoff + 1);
+    ///
+    /// assert_eq!(2, engine.get(&res));
+    ///
+    /// // small changes don't cause recalculations
+    /// set_num.set(5);
+    /// assert_eq!(2, engine.get(&res));
+    ///
+    /// // but big changes do
+    /// set_num.set(11);
+    /// assert_eq!(12, engine.get(&res));
+    /// ```
     fn cutoff<F, Out>(self, _f: F) -> Anchor<Out, E>
     where
         Out: 'static,
