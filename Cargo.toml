@@ -1,6 +1,6 @@
 [package]
 name = "anchors"
-version = "0.2.0"
+version = "0.4.0"
 authors = ["Robert Lord <robert@lord.io>"]
 edition = "2018"
 description = "async incremental computations"
@@ -21,12 +21,3 @@ criterion = "0.3"
 [[bench]]
 name = "benchmarks"
 harness = false
-
-[profile.release]
-debug = true
-
-[[bin]]
-name = "linear_recalc"
-test = false
-bench = false
-
