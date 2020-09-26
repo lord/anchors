@@ -15,7 +15,7 @@ macro_rules! impl_tuple_map {
             Map<($(Anchor<$output_type, E>,)+), F, Out>
         where
             F: for<'any> FnMut($(&'any $output_type),+) -> Out,
-            Out: 'static,
+            Out: PartialEq + 'static,
             $(
                 $output_type: 'static,
             )+
@@ -57,12 +57,13 @@ macro_rules! impl_tuple_map {
                 self.output_stale = false;
 
                 if self.output.is_none() || found_updated {
-                    let new_val = (self.f)($(&ctx.get(&self.anchors.$num)),+);
-                    self.output = Some(new_val);
-                    Poll::Updated
-                } else {
-                    Poll::Unchanged
+                    let new_val = Some((self.f)($(&ctx.get(&self.anchors.$num)),+));
+                    if new_val != self.output {
+                        self.output = new_val;
+                        return Poll::Updated
+                    }
                 }
+                Poll::Unchanged
             }
             fn output<'slf, 'out, G: OutputContext<'out, Engine=E>>(
                 &'slf self,
