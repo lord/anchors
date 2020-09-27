@@ -75,6 +75,17 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         Ok(())
     }
 
+    pub fn set_edge_unnecessary(&mut self, child: T, parent: T) {
+        let node = self.get_mut_or_default(parent);
+        if let Ok(i) = node.necessary_children.binary_search(&child) {
+            node.necessary_children.remove(i);
+            {
+                let node = self.get_mut_or_default(child);
+                node.necessary_count -= 1;
+            }
+        }
+    }
+
     fn get_mut_or_default(&mut self, id: T) -> &mut Node<T> {
         if !self.nodes.contains_key(id) {
             self.nodes.insert(id, Default::default());
@@ -83,7 +94,8 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
     }
 
     pub fn remove(&mut self, node_id: T) {
-        unimplemented!()
+        self.drain_necessary_children(node_id);
+        self.nodes.remove(node_id);
     }
 
     pub fn clean_parents<'a>(
@@ -151,21 +163,21 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
     /// consider the graph to be subsequently invalid and either create a fresh one or panic.
     // TODO this still has a bug when reporting loops where it may report more items than just what's available
     pub fn set_min_height(&mut self, node_id: T, min_height: usize) -> Result<(), Vec<T>> {
-        // let node = self.get_mut_or_default(node_id);
-        // if node.visited {
-        //     return Err(vec![node_id]);
-        // }
-        // node.visited = true;
-        // if node.height < min_height {
-        //     node.height = min_height;
-        //     for (child, _) in node.parents.clone().iter() {
-        //         if let Err(mut loop_ids) = self.set_min_height(*child, min_height + 1) {
-        //             loop_ids.push(node_id);
-        //             return Err(loop_ids);
-        //         }
-        //     }
-        // }
-        // self.get_mut_or_default(node_id).visited = false;
+        let node = self.get_mut_or_default(node_id);
+        if node.visited {
+            return Err(vec![node_id]);
+        }
+        node.visited = true;
+        if node.height < min_height {
+            node.height = min_height;
+            for child in node.clean_parents.clone().iter() {
+                if let Err(mut loop_ids) = self.set_min_height(*child, min_height + 1) {
+                    loop_ids.push(node_id);
+                    return Err(loop_ids);
+                }
+            }
+        }
+        self.get_mut_or_default(node_id).visited = false;
         Ok(())
     }
 }
@@ -182,12 +194,12 @@ mod test {
         }
     }
 
-    #[test]
-    fn set_edge_updates_correctly() {
-    }
-
     fn k(num: u64) -> DefaultKey {
         KeyData::from_ffi(num).into()
+    }
+
+    #[test]
+    fn set_edge_updates_correctly() {
     }
 
     #[test]

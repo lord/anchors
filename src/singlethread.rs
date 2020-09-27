@@ -164,21 +164,19 @@ impl Engine {
             .get_mut(anchor.data.num)
             .unwrap()
             .observed = false;
+        self.update_necessary_children(anchor.data.num);
+    }
 
-        self.queue.push(anchor.data.num);
-
-        while let Some(next_id) = self.queue.pop() {
-            if self.check_observed(next_id) != ObservedState::Unnecessary {
-                // we have another parent still observed, so skip this
-                continue;
+    fn update_necessary_children(&mut self, id: NodeNum) {
+        if self.check_observed(id) != ObservedState::Unnecessary {
+            // we have another parent still observed, so skip this
+            return;
+        }
+        if let Some(necessary_children) = self.graph.drain_necessary_children(id) {
+            for child in necessary_children {
+                // TODO remove from calculation queue if necessary?
+                self.update_necessary_children(child);
             }
-            if let Some(mut necessary_children) = self.graph.drain_necessary_children(next_id) {
-                for child in &necessary_children {
-                    self.queue.push(*child);
-                }
-                self.queue.append(&mut necessary_children);
-            }
-            // TODO remove from calculation queue if necessary?
         }
     }
 
@@ -567,8 +565,8 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
     }
 
     fn unrequest<'out, O: 'static>(&mut self, anchor: &Anchor<O, Self::Engine>) {
-        // TODO SHOULD RECURSE
-        unimplemented!()
+        self.engine.graph.set_edge_unnecessary(anchor.data.num, self.node_num);
+        self.engine.update_necessary_children(anchor.data.num);
     }
 
     fn dirty_handle(&mut self) -> DirtyHandle {
