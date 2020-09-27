@@ -50,6 +50,9 @@ pub struct Engine {
     to_recalculate: NodeQueue<NodeNum>,
     dirty_marks: Rc<RefCell<Vec<NodeNum>>>,
     refcounter: RefCounter<NodeNum>,
+
+    // used internally by mark_dirty. we persist it so we can allocate less
+    queue: Vec<NodeNum>,
 }
 
 struct Mounter {
@@ -109,6 +112,7 @@ impl Engine {
             to_recalculate: NodeQueue::new(max_height),
             dirty_marks: Default::default(),
             refcounter,
+            queue: vec![],
         }
     }
 
@@ -150,7 +154,7 @@ impl Engine {
                 // changed or not
                 let res = self
                     .graph
-                    .set_edge(*child, next_id, graph::EdgeState::Clean);
+                    .set_edge_clean(*child, next_id, false);
                 self.panic_if_loop(res);
             }
             queue.append(&mut necessary_children);
@@ -322,41 +326,41 @@ impl Engine {
     // skip_self = true indicates output has *definitely* changed, but node has been recalculated
     // skip_self = false indicates node has not yet been recalculated
     fn mark_dirty(&mut self, node_id: NodeNum, skip_self: bool) {
-        let mut queue = if skip_self {
-            let res = match self.graph.parents(node_id) {
-                Some(vec) => vec.collect(),
-                None => vec![],
-            };
-            for item in &res {
-                // TODO now that we don't delete edges, this is called multiple times in some cases? maybee?? but if we only call it
-                // when the parent node was previously clean...seems like at worst we call it twice?
-                self.nodes
-                    .borrow()
-                    .get(*item)
-                    .unwrap()
-                    .anchor
-                    .borrow_mut()
-                    .dirty(&node_id);
-                // mark edges as dirty, since skip_self indicates this node's output actually
-                // changed
-                // leave observed edges alone
-                if self.graph.edge(node_id, *item) == graph::EdgeState::Clean {
-                    let res = self.graph.set_edge(node_id, *item, graph::EdgeState::Dirty);
-                    self.panic_if_loop(res);
+        if skip_self {
+            if let Some(parents) = self.graph.parents(node_id) {
+                self.queue.reserve(parents.size_hint().0);
+                for parent in parents {
+                    self.nodes
+                        .borrow()
+                        .get(parent)
+                        .unwrap()
+                        .anchor
+                        .borrow_mut()
+                        .dirty(&node_id);
+                    // TODO now that we don't delete edges, this is called multiple times in some cases? maybee?? but if we only call it
+                    // when the parent node was previously clean...seems like at worst we call it twice?
+                    // mark edges as dirty, since skip_self indicates this node's output actually
+                    // changed
+                    // leave observed edges alone
+                    self.queue.push(parent);
                 }
             }
-            res
+            for parent in &self.queue {
+                if self.graph.edge(node_id, *parent) == graph::EdgeState::Clean {
+                    self.graph.set_edge_dirty(node_id, *parent);
+                }
+            }
         } else {
-            vec![node_id]
+            self.queue.push(node_id);
         };
 
-        while let Some(next) = queue.pop() {
+        while let Some(next) = self.queue.pop() {
             if self.graph.is_necessary(next) || self.nodes.borrow()[next].observed {
                 self.mark_node_for_recalculation(next);
             } else if self.to_recalculate.state(next) == NodeState::Ready {
                 self.to_recalculate.needs_recalc(next);
                 if let Some(parents) = self.graph.parents(next) {
-                    queue.reserve(parents.size_hint().0);
+                    self.queue.reserve(parents.size_hint().0);
                     for parent in parents {
                         self.nodes
                             .borrow()
@@ -365,7 +369,7 @@ impl Engine {
                             .anchor
                             .borrow_mut()
                             .dirty(&next);
-                        queue.push(parent);
+                        self.queue.push(parent);
                     }
                 }
             };
@@ -504,10 +508,10 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
             self.pending_on_anchor_get = true;
             self.engine.mark_node_for_recalculation(anchor.data.num);
             if necessary && self_is_necessary {
-                let res = self.engine.graph.set_edge(
+                let res = self.engine.graph.set_edge_clean(
                     anchor.data.num,
                     self.node_num,
-                    graph::EdgeState::Necessary,
+                    true,
                 );
                 self.engine.panic_if_loop(res);
             }
@@ -518,14 +522,10 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
         } else {
             match self.engine.graph.edge(anchor.data.num, self.node_num) {
                 graph::EdgeState::Dirty => {
-                    let res = self.engine.graph.set_edge(
+                    let res = self.engine.graph.set_edge_clean(
                         anchor.data.num,
                         self.node_num,
-                        if necessary && self_is_necessary {
-                            graph::EdgeState::Necessary
-                        } else {
-                            graph::EdgeState::Clean
-                        },
+                        necessary && self_is_necessary,
                     );
                     self.engine.panic_if_loop(res);
                     Poll::Updated
@@ -538,11 +538,9 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
 
     fn unrequest<'out, O: 'static>(&mut self, anchor: &Anchor<O, Self::Engine>) {
         // TODO DELETE EDGE INSTEAD OF SETTING TO DIRTY
-        let res =
-            self.engine
-                .graph
-                .set_edge(anchor.data.num, self.node_num, graph::EdgeState::Dirty);
-        self.engine.panic_if_loop(res);
+        self.engine
+            .graph
+            .set_edge_dirty(anchor.data.num, self.node_num);
     }
 
     fn dirty_handle(&mut self) -> DirtyHandle {
