@@ -15,6 +15,20 @@ use std::cell::RefCell;
 use std::panic::Location;
 use std::rc::Rc;
 
+use std::num::NonZeroU64;
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
+pub struct Generation(NonZeroU64);
+impl Generation {
+    fn new() -> Generation {
+        Generation(NonZeroU64::new(1).unwrap())
+    }
+    fn increment(&mut self) {
+        let gen: u64  = u64::from(self.0) + 1;
+        self.0 = NonZeroU64::new(gen).unwrap();
+    }
+}
+
 thread_local! {
     static DEFAULT_MOUNTER: RefCell<Option<Mounter>> = RefCell::new(None);
 }
@@ -53,6 +67,9 @@ pub struct Engine {
 
     // used internally by mark_dirty. we persist it so we can allocate less
     queue: Vec<NodeNum>,
+
+    // tracks the current stabilization generation; incremented on every stabilize
+    generation: Generation,
 }
 
 struct Mounter {
@@ -75,6 +92,8 @@ impl crate::Engine for Engine {
                 observed: false,
                 anchor: Rc::new(RefCell::new(inner)),
                 debug_info,
+                last_ready: None,
+                last_update: None,
             });
             this.refcounter.create(num);
             Anchor::new(AnchorHandle {
@@ -89,6 +108,10 @@ struct Node {
     observed: bool,
     debug_info: AnchorDebugInfo,
     anchor: Rc<RefCell<dyn GenericAnchor>>,
+    /// tracks the generation when this Node last polled as Updated or Unchanged
+    last_ready: Option<Generation>,
+    /// tracks the generation when this Node last polled as Updated
+    last_update: Option<Generation>,
 }
 
 impl Engine {
@@ -113,6 +136,7 @@ impl Engine {
             dirty_marks: Default::default(),
             refcounter,
             queue: vec![],
+            generation: Generation::new(),
         }
     }
 
@@ -172,7 +196,9 @@ impl Engine {
             self.to_recalculate
                 .queue_recalc(self.graph.height(anchor.data.num), anchor.data.num);
             // stabilize again, to make sure our target node that is now in the queue is up-to-date
-            self.stabilize();
+            // use stabilize0 because no dirty marks have occured since last stabilization, and we want
+            // to make sure we don't unnecessarily increment generation number
+            self.stabilize0();
         }
         let target_anchor = &self.nodes.borrow()[anchor.data.num].anchor.clone();
         let borrow = target_anchor.borrow();
@@ -195,9 +221,14 @@ impl Engine {
 
     /// Ensure any Observed nodes are up-to-date, recalculating dependencies as necessary. You
     /// should rarely need to call this yourself; `Engine::get` calls it automatically.
-    pub fn stabilize<'a>(&'a mut self) {
+    pub fn stabilize(&mut self) {
         self.update_dirty_marks();
+        self.generation.increment();
+        self.stabilize0();
+    }
 
+    /// internal function for stabilization. does not update dirty marks or increment the stabilization number
+    fn stabilize0(&mut self) {
         while let Some((height, this_node_num)) = self.to_recalculate.pop_next() {
             let calculation_complete = if height == self.graph.height(this_node_num) {
                 // this nodes height is current, so we can recalculate
