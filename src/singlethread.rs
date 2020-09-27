@@ -370,6 +370,7 @@ impl Engine {
             if let Some(parents) = self.graph.parents(node_id) {
                 self.queue.reserve(parents.size_hint().0);
                 for parent in parents {
+                    // TODO still calling dirty twice on observed relationships
                     self.nodes
                         .borrow()
                         .get(parent)
@@ -377,11 +378,6 @@ impl Engine {
                         .anchor
                         .borrow_mut()
                         .dirty(&node_id);
-                    // TODO now that we don't delete edges, this is called multiple times in some cases? maybee?? but if we only call it
-                    // when the parent node was previously clean...seems like at worst we call it twice?
-                    // mark edges as dirty, since skip_self indicates this node's output actually
-                    // changed
-                    // leave observed edges alone
                     self.queue.push(parent);
                 }
             }
@@ -491,7 +487,6 @@ impl<'eng> OutputContext<'eng> for EngineContext<'eng> {
     {
         let target_node = &self.engine.nodes.borrow()[anchor.data.num];
         if self.engine.to_recalculate.state(anchor.data.num) != NodeState::Ready
-            || self.engine.graph.edge(anchor.data.num, self.node_num) == graph::EdgeState::Dirty
         {
             panic!("attempted to get node that was not previously requested")
         }
@@ -517,7 +512,6 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
     {
         let target_node = &self.engine.nodes.borrow()[anchor.data.num];
         if self.engine.to_recalculate.state(anchor.data.num) != NodeState::Ready
-            || self.engine.graph.edge(anchor.data.num, self.node_num) == graph::EdgeState::Dirty
         {
             panic!("attempted to get node that was not previously requested")
         }
@@ -584,7 +578,7 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
     }
 
     fn unrequest<'out, O: 'static>(&mut self, anchor: &Anchor<O, Self::Engine>) {
-        // TODO DELETE EDGE INSTEAD OF SETTING TO DIRTY
+        // TODO SHOULD RECURSE
         self.engine
             .graph
             .set_edge_dirty(anchor.data.num, self.node_num);
