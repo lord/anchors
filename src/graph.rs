@@ -61,23 +61,12 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         unimplemented!()
     }
 
-    pub fn set_edge_clean(&mut self, from: T, to: T, necessary: bool) -> Result<(), Vec<T>> {
-        // {
-        //     let node = self.get_mut_or_default(from);
-        //     match node.parents.binary_search_by_key(&to, |v| v.0) {
-        //         Ok(i) => node.parents[i].1 = necessary,
-        //         Err(i) => node.parents.insert(i, (to, necessary)),
-        //     }
-        // }
-        // {
-        //     let node = self.get_mut_or_default(to);
-        //     match node.children.binary_search(&from) {
-        //         Ok(_) => {}
-        //         Err(i) => node.children.insert(i, from),
-        //     }
-        // }
-        // self.ensure_height_increases(from, to)
-        unimplemented!()
+    pub fn set_edge_clean(&mut self, child: T, parent: T, necessary: bool) -> Result<(), Vec<T>> {
+        let node = self.get_mut_or_default(child);
+        if let Err(i) = node.clean_parents.binary_search(&parent) {
+            node.clean_parents.insert(i, parent);
+        }
+        self.ensure_height_increases(child, parent)
     }
 
     fn get_mut_or_default(&mut self, id: T) -> &mut Node<T> {
