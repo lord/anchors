@@ -1,5 +1,6 @@
 pub struct FakeHeap<T> {
-    min_height: usize,
+    current_min_height: usize,
+    current_max_height: usize,
     lists: Vec<Vec<T>>,
 }
 
@@ -11,7 +12,8 @@ impl<T> FakeHeap<T> {
         }
         Self {
             lists,
-            min_height: max_height,
+            current_min_height: max_height,
+            current_max_height: 0,
         }
     }
 
@@ -24,17 +26,19 @@ impl<T> FakeHeap<T> {
             );
         }
         self.lists[height].push(item);
-        self.min_height = self.min_height.min(height);
+        self.current_min_height = self.current_min_height.min(height);
+        self.current_max_height = self.current_max_height.max(height);
     }
 
     pub fn pop_min(&mut self) -> Option<(usize, T)> {
-        while self.min_height < self.lists.len() {
-            if let Some(v) = self.lists[self.min_height].pop() {
-                return Some((self.min_height, v));
+        while self.current_min_height <= self.current_max_height {
+            if let Some(v) = self.lists[self.current_min_height].pop() {
+                return Some((self.current_min_height, v));
             } else {
-                self.min_height += 1;
+                self.current_min_height += 1;
             }
         }
+        self.current_max_height = 0;
         None
     }
 }
