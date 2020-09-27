@@ -57,7 +57,7 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         self.set_min_height(to, self.height(from) + 1)
     }
 
-    pub fn set_edge_clean(&mut self, child: T, parent: T, necessary: bool) -> Result<(), Vec<T>> {
+    pub fn set_edge_clean(&mut self, child: T, parent: T) -> Result<(), Vec<T>> {
         let node = self.get_mut_or_default(child);
         if let Err(i) = node.clean_parents.binary_search(&parent) {
             node.clean_parents.insert(i, parent);
