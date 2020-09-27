@@ -172,11 +172,11 @@ impl Engine {
                 // we have another parent still observed, so skip this
                 continue;
             }
-            if let Some(necessary_children) = self.graph.drain_necessary_children(next_id) {
-                self.queue.reserve(necessary_children.size_hint().0);
-                for child in necessary_children {
-                    self.queue.push(child);
+            if let Some(mut necessary_children) = self.graph.drain_necessary_children(next_id) {
+                for child in &necessary_children {
+                    self.queue.push(*child);
                 }
+                self.queue.append(&mut necessary_children);
             }
             // TODO remove from calculation queue if necessary?
         }

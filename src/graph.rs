@@ -123,12 +123,18 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         Some(node.necessary_children.iter())
     }
 
-    pub fn drain_necessary_children<'a>(&'a mut self, node_id: T) -> Option<impl std::iter::Iterator<Item = T> + 'a> {
+    pub fn drain_necessary_children<'a>(&'a mut self, node_id: T) -> Option<Vec<T>> {
         let node = match self.nodes.get_mut(node_id) {
             Some(v) => v,
             None => return None,
         };
-        Some(node.necessary_children.drain(..))
+        let necessary_children = std::mem::replace(&mut node.necessary_children, vec![]);
+        for child in &necessary_children {
+            if let Some(child_node) = self.nodes.get_mut(*child) {
+                child_node.necessary_count -= 1;
+            }
+        }
+        Some(necessary_children)
     }
 
     pub fn is_necessary(&self, node_id: T) -> bool {
