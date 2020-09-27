@@ -13,11 +13,11 @@ struct Node<T: Eq + Copy + Debug + Key + Ord> {
     /// These are the parents of this node that are clean
     clean_parents: Vec<T>,
 
-    /// These are the children of this node that are observed by this node
-    observed_children: Vec<T>,
+    /// These are the children of this node that are necessary by this node
+    necessary_children: Vec<T>,
 
-    /// This is the number of nodes that list this node as an observed child
-    observed_count: usize,
+    /// This is the number of nodes that list this node as an necessary child
+    necessary_count: usize,
 
     /// `0` if this node has no children, otherwise `max of children's height + 1`. This number
     /// can only ever increase, so that we avoid re-updating the whole graph if the height of some
@@ -32,8 +32,8 @@ impl<T: Eq + Copy + Debug + Key + Ord> Default for Node<T> {
             height: 0,
             visited: false,
             clean_parents: vec![],
-            observed_children: vec![],
-            observed_count: 0,
+            necessary_children: vec![],
+            necessary_count: 0,
         }
     }
 }
@@ -104,7 +104,7 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         )
     }
 
-    pub fn empty_clean_parents<'a>(
+    pub fn drain_clean_parents<'a>(
         &'a mut self,
         node_id: T,
     ) -> Option<impl std::iter::Iterator<Item = T> + 'a> {
@@ -112,13 +112,23 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
             Some(v) => v,
             None => return None,
         };
-        Some(
-            node.clean_parents.drain(..)
-        )
+        Some(node.clean_parents.drain(..))
     }
 
-    pub fn necessary_children(&self, node_id: T) -> Vec<T> {
-        unimplemented!()
+    pub fn necessary_children<'a>(&'a self, node_id: T) -> Option<impl std::iter::Iterator<Item = &'a T>> {
+        let node = match self.nodes.get(node_id) {
+            Some(v) => v,
+            None => return None,
+        };
+        Some(node.necessary_children.iter())
+    }
+
+    pub fn drain_necessary_children<'a>(&'a mut self, node_id: T) -> Option<impl std::iter::Iterator<Item = T> + 'a> {
+        let node = match self.nodes.get_mut(node_id) {
+            Some(v) => v,
+            None => return None,
+        };
+        Some(node.necessary_children.drain(..))
     }
 
     pub fn is_necessary(&self, node_id: T) -> bool {
@@ -127,7 +137,7 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
             None => return false,
         };
 
-        node.observed_count > 0
+        node.necessary_count > 0
     }
 
     pub fn height(&self, node_id: T) -> usize {

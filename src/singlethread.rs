@@ -165,23 +165,19 @@ impl Engine {
             .unwrap()
             .observed = false;
 
-        let mut queue = vec![anchor.data.num];
+        self.queue.push(anchor.data.num);
 
-        while let Some(next_id) = queue.pop() {
+        while let Some(next_id) = self.queue.pop() {
             if self.check_observed(next_id) != ObservedState::Unnecessary {
                 // we have another parent still observed, so skip this
                 continue;
             }
-            let mut necessary_children = self.graph.necessary_children(next_id);
-            for child in &necessary_children {
-                // TODO this may need to be dirty in some cases?? may want to better track if a value has been
-                // changed or not
-                let res = self
-                    .graph
-                    .set_edge_clean(*child, next_id, false);
-                self.panic_if_loop(res);
+            if let Some(necessary_children) = self.graph.drain_necessary_children(next_id) {
+                self.queue.reserve(necessary_children.size_hint().0);
+                for child in necessary_children {
+                    self.queue.push(child);
+                }
             }
-            queue.append(&mut necessary_children);
             // TODO remove from calculation queue if necessary?
         }
     }
@@ -367,7 +363,7 @@ impl Engine {
     // skip_self = false indicates node has not yet been recalculated
     fn mark_dirty(&mut self, node_id: NodeNum, skip_self: bool) {
         if skip_self {
-            if let Some(parents) = self.graph.empty_clean_parents(node_id) {
+            if let Some(parents) = self.graph.drain_clean_parents(node_id) {
                 self.queue.reserve(parents.size_hint().0);
                 for parent in parents {
                     // TODO still calling dirty twice on observed relationships
@@ -391,7 +387,7 @@ impl Engine {
             } else if self.to_recalculate.state(next) == NodeState::Ready {
                 self.to_recalculate.needs_recalc(next);
                 let start_i = self.queue.len();
-                if let Some(parents) = self.graph.empty_clean_parents(next) {
+                if let Some(parents) = self.graph.drain_clean_parents(next) {
                     self.queue.reserve(parents.size_hint().0);
                     for parent in parents {
                         self.nodes
