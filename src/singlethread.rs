@@ -384,7 +384,6 @@ impl Engine {
                 self.mark_node_for_recalculation(next);
             } else if self.to_recalculate.state(next) == NodeState::Ready {
                 self.to_recalculate.needs_recalc(next);
-                let start_i = self.queue.len();
                 if let Some(parents) = self.graph.drain_clean_parents(next) {
                     self.queue.reserve(parents.size_hint().0);
                     for parent in parents {

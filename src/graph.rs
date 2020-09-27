@@ -1,13 +1,6 @@
 use slotmap::{secondary::SecondaryMap, Key};
 use std::fmt::Debug;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum EdgeState {
-    Necessary,
-    Dirty,
-    Clean,
-}
-
 #[derive(Debug, Clone)]
 struct Node<T: Eq + Copy + Debug + Key + Ord> {
     /// These are the parents of this node that are clean
@@ -98,6 +91,7 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         self.nodes.remove(node_id);
     }
 
+    #[allow(dead_code)]
     pub fn clean_parents<'a>(
         &'a self,
         node_id: T,
@@ -122,6 +116,7 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         Some(node.clean_parents.drain(..))
     }
 
+    #[allow(dead_code)]
     pub fn necessary_children<'a>(&'a self, node_id: T) -> Option<impl std::iter::Iterator<Item = &'a T>> {
         let node = match self.nodes.get(node_id) {
             Some(v) => v,
