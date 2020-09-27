@@ -331,9 +331,18 @@ impl Engine {
             Poll::Updated => {
                 // make sure all parents are marked as dirty, and observed parents are recalculated
                 self.mark_dirty(this_node_num, true);
+                let mut nodes = self.nodes.borrow_mut();
+                let node = nodes.get_mut(this_node_num).unwrap();
+                node.last_update = Some(self.generation);
+                node.last_ready = Some(self.generation);
                 true
             }
-            Poll::Unchanged => true,
+            Poll::Unchanged => {
+                let mut nodes = self.nodes.borrow_mut();
+                let node = nodes.get_mut(this_node_num).unwrap();
+                node.last_ready = Some(self.generation);
+                true
+            },
         }
     }
 
@@ -390,6 +399,7 @@ impl Engine {
                 self.mark_node_for_recalculation(next);
             } else if self.to_recalculate.state(next) == NodeState::Ready {
                 self.to_recalculate.needs_recalc(next);
+                let start_i = self.queue.len();
                 if let Some(parents) = self.graph.parents(next) {
                     self.queue.reserve(parents.size_hint().0);
                     for parent in parents {
@@ -401,6 +411,11 @@ impl Engine {
                             .borrow_mut()
                             .dirty(&next);
                         self.queue.push(parent);
+                    }
+                }
+                for parent in &self.queue[start_i..] {
+                    if self.graph.edge(node_id, *parent) == graph::EdgeState::Clean {
+                        self.graph.set_edge_dirty(node_id, *parent);
                     }
                 }
             };
@@ -551,18 +566,19 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
             self.pending_on_anchor_get = true;
             Poll::Pending
         } else {
-            match self.engine.graph.edge(anchor.data.num, self.node_num) {
-                graph::EdgeState::Dirty => {
-                    let res = self.engine.graph.set_edge_clean(
-                        anchor.data.num,
-                        self.node_num,
-                        necessary && self_is_necessary,
-                    );
-                    self.engine.panic_if_loop(res);
-                    Poll::Updated
-                }
-                graph::EdgeState::Necessary => Poll::Updated,
-                graph::EdgeState::Clean => Poll::Unchanged,
+            if graph::EdgeState::Dirty == self.engine.graph.edge(anchor.data.num, self.node_num) {
+                let res = self.engine.graph.set_edge_clean(
+                    anchor.data.num,
+                    self.node_num,
+                    necessary && self_is_necessary,
+                );
+                self.engine.panic_if_loop(res);
+            }
+            let nodes = self.engine.nodes.borrow();
+            if nodes.get(anchor.data.num).unwrap().last_update > nodes.get(self.node_num).unwrap().last_ready {
+                Poll::Updated
+            } else {
+                Poll::Unchanged
             }
         }
     }
