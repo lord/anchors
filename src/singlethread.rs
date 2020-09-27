@@ -545,19 +545,17 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
             self.pending_on_anchor_get = true;
             Poll::Pending
         } else {
-            if graph::EdgeState::Dirty == self.engine.graph.edge(anchor.data.num, self.node_num) {
-                let res = self.engine.graph.set_edge_clean(
+            let res = self.engine.graph.set_edge_clean(
+                anchor.data.num,
+                self.node_num,
+            );
+            self.engine.panic_if_loop(res);
+            if necessary && self_is_necessary {
+                let res = self.engine.graph.set_edge_necessary(
                     anchor.data.num,
                     self.node_num,
                 );
                 self.engine.panic_if_loop(res);
-                if necessary && self_is_necessary {
-                    let res = self.engine.graph.set_edge_necessary(
-                        anchor.data.num,
-                        self.node_num,
-                    );
-                    self.engine.panic_if_loop(res);
-                }
             }
             let nodes = self.engine.nodes.borrow();
             if nodes.get(anchor.data.num).unwrap().last_update > nodes.get(self.node_num).unwrap().last_ready {

@@ -49,10 +49,6 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         }
     }
 
-    pub fn edge(&self, from: T, to: T) -> EdgeState {
-        unimplemented!()
-    }
-
     pub fn ensure_height_increases(&mut self, from: T, to: T) -> Result<(), Vec<T>> {
         self.set_min_height(to, self.height(from) + 1)
     }
@@ -61,16 +57,18 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         let node = self.get_mut_or_default(child);
         if let Err(i) = node.clean_parents.binary_search(&parent) {
             node.clean_parents.insert(i, parent);
+            return self.ensure_height_increases(child, parent);
         }
-        self.ensure_height_increases(child, parent)
+        Ok(())
     }
 
     pub fn set_edge_necessary(&mut self, child: T, parent: T) -> Result<(), Vec<T>> {
         let node = self.get_mut_or_default(parent);
         if let Err(i) = node.necessary_children.binary_search(&child) {
             node.necessary_children.insert(i, child);
+            return self.ensure_height_increases(child, parent);
         }
-        self.ensure_height_increases(child, parent)
+        Ok(())
     }
 
     fn get_mut_or_default(&mut self, id: T) -> &mut Node<T> {
