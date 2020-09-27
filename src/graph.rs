@@ -186,11 +186,12 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
 mod test {
     use super::*;
     use slotmap::{DefaultKey, KeyData};
+    use std::ops::Deref;
 
-    fn to_vec<I: std::iter::Iterator>(iter: Option<I>) -> Vec<I::Item> {
+    fn to_vec<I: std::iter::Iterator>(iter: Option<I>) -> Vec<<I::Item as Deref>::Target> where I::Item: Deref, <I::Item as Deref>::Target : Sized + Copy {
         match iter {
             None => vec![],
-            Some(iter) => iter.collect(),
+            Some(iter) => iter.map(|v| *v).collect(),
         }
     }
 
@@ -200,17 +201,109 @@ mod test {
 
     #[test]
     fn set_edge_updates_correctly() {
+        let mut graph = MetadataGraph::<DefaultKey>::new();
+        let empty: Vec<DefaultKey> = vec![];
+
+        assert_eq!(empty, to_vec(graph.necessary_children(k(1))));
+        assert_eq!(empty, to_vec(graph.clean_parents(k(1))));
+        assert_eq!(empty, to_vec(graph.necessary_children(k(2))));
+        assert_eq!(empty, to_vec(graph.clean_parents(k(2))));
+        assert_eq!(false, graph.is_necessary(k(1)));
+        assert_eq!(false, graph.is_necessary(k(2)));
+
+        graph.set_edge_clean(k(1), k(2)).unwrap();
+
+        assert_eq!(empty, to_vec(graph.necessary_children(k(1))));
+        assert_eq!(vec![k(2)], to_vec(graph.clean_parents(k(1))));
+        assert_eq!(empty, to_vec(graph.necessary_children(k(2))));
+        assert_eq!(empty, to_vec(graph.clean_parents(k(2))));
+        assert_eq!(false, graph.is_necessary(k(1)));
+        assert_eq!(false, graph.is_necessary(k(2)));
+
+        graph.set_edge_necessary(k(1), k(2)).unwrap();
+
+        assert_eq!(empty, to_vec(graph.necessary_children(k(1))));
+        assert_eq!(vec![k(2)], to_vec(graph.clean_parents(k(1))));
+        assert_eq!(vec![k(1)], to_vec(graph.necessary_children(k(2))));
+        assert_eq!(empty, to_vec(graph.clean_parents(k(2))));
+        assert_eq!(true, graph.is_necessary(k(1)));
+        assert_eq!(false, graph.is_necessary(k(2)));
+
+        graph.drain_clean_parents(k(1));
+
+        assert_eq!(empty, to_vec(graph.necessary_children(k(1))));
+        assert_eq!(empty, to_vec(graph.clean_parents(k(1))));
+        assert_eq!(vec![k(1)], to_vec(graph.necessary_children(k(2))));
+        assert_eq!(empty, to_vec(graph.clean_parents(k(2))));
+        assert_eq!(true, graph.is_necessary(k(1)));
+        assert_eq!(false, graph.is_necessary(k(2)));
+
+        graph.drain_necessary_children(k(2));
+
+        assert_eq!(empty, to_vec(graph.necessary_children(k(1))));
+        assert_eq!(empty, to_vec(graph.clean_parents(k(1))));
+        assert_eq!(empty, to_vec(graph.necessary_children(k(2))));
+        assert_eq!(empty, to_vec(graph.clean_parents(k(2))));
+        assert_eq!(false, graph.is_necessary(k(1)));
+        assert_eq!(false, graph.is_necessary(k(2)));
     }
 
     #[test]
     fn height_calculated_correctly() {
+        let mut graph = MetadataGraph::<DefaultKey>::new();
+
+        assert_eq!(0, graph.height(k(1)));
+        assert_eq!(0, graph.height(k(2)));
+        assert_eq!(0, graph.height(k(3)));
+
+        graph.set_edge_clean(k(2), k(3)).unwrap();
+
+        assert_eq!(0, graph.height(k(1)));
+        assert_eq!(0, graph.height(k(2)));
+        assert_eq!(1, graph.height(k(3)));
+
+        graph.set_edge_clean(k(1), k(2)).unwrap();
+
+        assert_eq!(0, graph.height(k(1)));
+        assert_eq!(1, graph.height(k(2)));
+        assert_eq!(2, graph.height(k(3)));
+
+        graph.drain_clean_parents(k(1));
+
+        assert_eq!(0, graph.height(k(1)));
+        assert_eq!(1, graph.height(k(2)));
+        assert_eq!(2, graph.height(k(3)));
+
+        graph.set_min_height(k(1), 10).unwrap();
+
+        assert_eq!(10, graph.height(k(1)));
+        assert_eq!(1, graph.height(k(2)));
+        assert_eq!(2, graph.height(k(3)));
+
+        graph.set_min_height(k(2), 5).unwrap();
+
+        assert_eq!(10, graph.height(k(1)));
+        assert_eq!(5, graph.height(k(2)));
+        assert_eq!(6, graph.height(k(3)));
     }
 
     #[test]
     fn cycles_cause_error() {
+        let mut graph = MetadataGraph::<DefaultKey>::new();
+        graph.set_edge_clean(k(2), k(3)).unwrap();
+        let loop_ids = graph
+            .set_edge_clean(k(3), k(2))
+            .unwrap_err();
+        assert!(&loop_ids == &[k(2), k(3), k(2)] || &loop_ids == &[k(3), k(2), k(3)]);
     }
 
     #[test]
     fn non_cycles_wont_cause_errors() {
+        let mut graph = MetadataGraph::<DefaultKey>::new();
+        graph.set_edge_clean(k(10), k(20)).unwrap();
+        graph.set_edge_clean(k(20), k(30)).unwrap();
+        graph.set_edge_clean(k(10), k(21)).unwrap();
+        graph.set_edge_clean(k(21), k(30)).unwrap();
+        graph.set_edge_clean(k(2), k(10)).unwrap();
     }
 }
