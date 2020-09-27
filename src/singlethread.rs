@@ -565,9 +565,7 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
 
     fn unrequest<'out, O: 'static>(&mut self, anchor: &Anchor<O, Self::Engine>) {
         // TODO SHOULD RECURSE
-        self.engine
-            .graph
-            .set_edge_dirty(anchor.data.num, self.node_num);
+        unimplemented!()
     }
 
     fn dirty_handle(&mut self) -> DirtyHandle {
