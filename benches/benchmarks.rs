@@ -1,12 +1,12 @@
 use anchors::{singlethread::Engine, AnchorExt, Var};
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 
-fn stabilize_linear_nodes(c: &mut Criterion) {
+fn stabilize_linear_nodes_simple(c: &mut Criterion) {
     for node_count in &[10, 100, 1000] {
         for observed in &[true, false] {
             c.bench_with_input(
                 BenchmarkId::new(
-                    "stabilize_linear_nodes",
+                    "stabilize_linear_nodes_simple",
                     format!(
                         "{}/{}",
                         node_count,
@@ -124,6 +124,6 @@ fn stabilize_linear_nodes_cutoff(c: &mut Criterion) {
 criterion_group! {
     name = benches;
     config = Criterion::default();
-    targets = stabilize_linear_nodes_cutoff, stabilize_linear_nodes_smallheight, stabilize_linear_nodes
+    targets = stabilize_linear_nodes_cutoff, stabilize_linear_nodes_smallheight, stabilize_linear_nodes_simple
 }
 criterion_main!(benches);
