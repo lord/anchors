@@ -104,6 +104,20 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         )
     }
 
+    pub fn empty_clean_parents<'a>(
+        &'a mut self,
+        node_id: T,
+    ) -> Option<impl std::iter::Iterator<Item = T> + 'a> {
+        let node = match self.nodes.get_mut(node_id) {
+            Some(v) => v,
+            None => return None,
+        };
+        Some(
+            node.clean_parents.drain(..)
+        )
+    }
+
+
     pub fn parents<'a>(&'a self, node_id: T) -> Option<impl std::iter::Iterator<Item = T>> {
         // TODO should get rid of this fn
         unimplemented!();
