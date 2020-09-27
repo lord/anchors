@@ -66,6 +66,10 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         let node = self.get_mut_or_default(parent);
         if let Err(i) = node.necessary_children.binary_search(&child) {
             node.necessary_children.insert(i, child);
+            {
+                let node = self.get_mut_or_default(child);
+                node.necessary_count += 1;
+            }
             return self.ensure_height_increases(child, parent);
         }
         Ok(())
