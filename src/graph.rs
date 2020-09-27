@@ -60,29 +60,25 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         self.set_min_height(to, self.height(from) + 1)
     }
 
-    pub fn set_edge(&mut self, from: T, to: T, state: EdgeState) -> Result<(), Vec<T>> {
-        let is_necessary = match state {
-            EdgeState::Dirty => {
-                self.nodes.get_mut(from).map(|v| {
-                    if let Ok(i) = v.parents.binary_search_by_key(&to, |v| v.0) {
-                        v.parents.remove(i);
-                    }
-                });
-                self.nodes.get_mut(to).map(|v| {
-                    if let Ok(i) = v.children.binary_search(&from) {
-                        v.children.remove(i);
-                    }
-                });
-                return Ok(());
+    pub fn set_edge_dirty(&mut self, from: T, to: T) {
+        self.nodes.get_mut(from).map(|v| {
+            if let Ok(i) = v.parents.binary_search_by_key(&to, |v| v.0) {
+                v.parents.remove(i);
             }
-            EdgeState::Clean => false,
-            EdgeState::Necessary => true,
-        };
+        });
+        self.nodes.get_mut(to).map(|v| {
+            if let Ok(i) = v.children.binary_search(&from) {
+                v.children.remove(i);
+            }
+        });
+    }
+
+    pub fn set_edge_clean(&mut self, from: T, to: T, necessary: bool) -> Result<(), Vec<T>> {
         {
             let node = self.get_mut_or_default(from);
             match node.parents.binary_search_by_key(&to, |v| v.0) {
-                Ok(i) => node.parents[i].1 = is_necessary,
-                Err(i) => node.parents.insert(i, (to, is_necessary)),
+                Ok(i) => node.parents[i].1 = necessary,
+                Err(i) => node.parents.insert(i, (to, necessary)),
             }
         }
         {
@@ -110,11 +106,11 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
 
         for child in node.children {
             // ok to unwrap — not possible to loop when removing an edge
-            self.set_edge(child, node_id, EdgeState::Dirty).unwrap();
+            self.set_edge_dirty(child, node_id);
         }
         for (parent, _) in node.parents {
             // ok to unwrap — not possible to loop when removing an edge
-            self.set_edge(node_id, parent, EdgeState::Dirty).unwrap();
+            self.set_edge_dirty(node_id, parent);
         }
 
         self.nodes.remove(node_id);
@@ -256,7 +252,7 @@ mod test {
         assert_eq!(false, graph.is_necessary(k(1)));
         assert_eq!(false, graph.is_necessary(k(2)));
 
-        graph.set_edge(k(1), k(2), EdgeState::Clean).unwrap();
+        graph.set_edge_clean(k(1), k(2), false).unwrap();
 
         assert_eq!(EdgeState::Clean, graph.edge(k(1), k(2)));
         assert_eq!(EdgeState::Dirty, graph.edge(k(2), k(1)));
@@ -271,7 +267,7 @@ mod test {
         assert_eq!(false, graph.is_necessary(k(1)));
         assert_eq!(false, graph.is_necessary(k(2)));
 
-        graph.set_edge(k(1), k(2), EdgeState::Necessary).unwrap();
+        graph.set_edge_clean(k(1), k(2), true).unwrap();
 
         assert_eq!(EdgeState::Necessary, graph.edge(k(1), k(2)));
         assert_eq!(EdgeState::Dirty, graph.edge(k(2), k(1)));
@@ -286,7 +282,7 @@ mod test {
         assert_eq!(true, graph.is_necessary(k(1)));
         assert_eq!(false, graph.is_necessary(k(2)));
 
-        graph.set_edge(k(1), k(2), EdgeState::Dirty).unwrap();
+        graph.set_edge_dirty(k(1), k(2));
 
         assert_eq!(EdgeState::Dirty, graph.edge(k(1), k(2)));
         assert_eq!(EdgeState::Dirty, graph.edge(k(2), k(1)));
@@ -315,25 +311,25 @@ mod test {
         assert_eq!(0, graph.height(k(2)));
         assert_eq!(0, graph.height(k(3)));
 
-        graph.set_edge(k(2), k(3), EdgeState::Dirty).unwrap();
+        graph.set_edge_dirty(k(2), k(3));
 
         assert_eq!(0, graph.height(k(1)));
         assert_eq!(0, graph.height(k(2)));
         assert_eq!(0, graph.height(k(3)));
 
-        graph.set_edge(k(2), k(3), EdgeState::Necessary).unwrap();
+        graph.set_edge_clean(k(2), k(3), true).unwrap();
 
         assert_eq!(0, graph.height(k(1)));
         assert_eq!(0, graph.height(k(2)));
         assert_eq!(1, graph.height(k(3)));
 
-        graph.set_edge(k(1), k(2), EdgeState::Clean).unwrap();
+        graph.set_edge_clean(k(1), k(2), false).unwrap();
 
         assert_eq!(0, graph.height(k(1)));
         assert_eq!(1, graph.height(k(2)));
         assert_eq!(2, graph.height(k(3)));
 
-        graph.set_edge(k(1), k(2), EdgeState::Dirty).unwrap();
+        graph.set_edge_dirty(k(1), k(2));
 
         assert_eq!(0, graph.height(k(1)));
         assert_eq!(1, graph.height(k(2)));
@@ -355,9 +351,9 @@ mod test {
     #[test]
     fn cycles_cause_error() {
         let mut graph = MetadataGraph::<DefaultKey>::new();
-        graph.set_edge(k(2), k(3), EdgeState::Necessary).unwrap();
+        graph.set_edge_clean(k(2), k(3), true).unwrap();
         let loop_ids = graph
-            .set_edge(k(3), k(2), EdgeState::Necessary)
+            .set_edge_clean(k(3), k(2), true)
             .unwrap_err();
         assert!(&loop_ids == &[k(2), k(3), k(2)] || &loop_ids == &[k(3), k(2), k(3)]);
     }
@@ -365,10 +361,10 @@ mod test {
     #[test]
     fn non_cycles_wont_cause_errors() {
         let mut graph = MetadataGraph::<DefaultKey>::new();
-        graph.set_edge(k(10), k(20), EdgeState::Necessary).unwrap();
-        graph.set_edge(k(20), k(30), EdgeState::Necessary).unwrap();
-        graph.set_edge(k(10), k(21), EdgeState::Necessary).unwrap();
-        graph.set_edge(k(21), k(30), EdgeState::Necessary).unwrap();
-        graph.set_edge(k(2), k(10), EdgeState::Necessary).unwrap();
+        graph.set_edge_clean(k(10), k(20), true).unwrap();
+        graph.set_edge_clean(k(20), k(30), true).unwrap();
+        graph.set_edge_clean(k(10), k(21), true).unwrap();
+        graph.set_edge_clean(k(21), k(30), true).unwrap();
+        graph.set_edge_clean(k(2), k(10), true).unwrap();
     }
 }

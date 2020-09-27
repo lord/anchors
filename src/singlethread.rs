@@ -154,7 +154,7 @@ impl Engine {
                 // changed or not
                 let res = self
                     .graph
-                    .set_edge(*child, next_id, graph::EdgeState::Clean);
+                    .set_edge_clean(*child, next_id, false);
                 self.panic_if_loop(res);
             }
             queue.append(&mut necessary_children);
@@ -347,8 +347,7 @@ impl Engine {
             }
             for parent in &self.queue {
                 if self.graph.edge(node_id, *parent) == graph::EdgeState::Clean {
-                    let res = self.graph.set_edge(node_id, *parent, graph::EdgeState::Dirty);
-                    self.panic_if_loop(res);
+                    self.graph.set_edge_dirty(node_id, *parent);
                 }
             }
         } else {
@@ -509,10 +508,10 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
             self.pending_on_anchor_get = true;
             self.engine.mark_node_for_recalculation(anchor.data.num);
             if necessary && self_is_necessary {
-                let res = self.engine.graph.set_edge(
+                let res = self.engine.graph.set_edge_clean(
                     anchor.data.num,
                     self.node_num,
-                    graph::EdgeState::Necessary,
+                    true,
                 );
                 self.engine.panic_if_loop(res);
             }
@@ -523,14 +522,10 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
         } else {
             match self.engine.graph.edge(anchor.data.num, self.node_num) {
                 graph::EdgeState::Dirty => {
-                    let res = self.engine.graph.set_edge(
+                    let res = self.engine.graph.set_edge_clean(
                         anchor.data.num,
                         self.node_num,
-                        if necessary && self_is_necessary {
-                            graph::EdgeState::Necessary
-                        } else {
-                            graph::EdgeState::Clean
-                        },
+                        necessary && self_is_necessary,
                     );
                     self.engine.panic_if_loop(res);
                     Poll::Updated
@@ -543,11 +538,9 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
 
     fn unrequest<'out, O: 'static>(&mut self, anchor: &Anchor<O, Self::Engine>) {
         // TODO DELETE EDGE INSTEAD OF SETTING TO DIRTY
-        let res =
-            self.engine
-                .graph
-                .set_edge(anchor.data.num, self.node_num, graph::EdgeState::Dirty);
-        self.engine.panic_if_loop(res);
+        self.engine
+            .graph
+            .set_edge_dirty(anchor.data.num, self.node_num);
     }
 
     fn dirty_handle(&mut self) -> DirtyHandle {

@@ -1,7 +1,7 @@
 use anchors::{singlethread::Engine, AnchorExt, Var, VarSetter, Anchor};
 
 const NODE_COUNT: u64 = 100;
-const ITER_COUNT: u64 = 100000;
+const ITER_COUNT: u64 = 1000000;
 const OBSERVED: bool = false;
 
 fn main() {
@@ -21,7 +21,10 @@ fn main() {
 #[inline(never)]
 fn iter(node: Anchor<u64, Engine>, mut engine: Engine, set_first_num: VarSetter<u64, <Engine as anchors::Engine>::DirtyHandle>) {
     let mut update_number = 0;
-    for _ in 0..ITER_COUNT {
+    for i in 0..ITER_COUNT {
+        if i % (ITER_COUNT/100) == 0 {
+            println!("{}%", (i*100)/(ITER_COUNT));
+        }
         update_number += 1;
         set_first_num.set(update_number);
         assert_eq!(engine.get(&node), update_number + NODE_COUNT);
