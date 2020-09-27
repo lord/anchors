@@ -65,6 +65,14 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         self.ensure_height_increases(child, parent)
     }
 
+    pub fn set_edge_necessary(&mut self, child: T, parent: T) -> Result<(), Vec<T>> {
+        let node = self.get_mut_or_default(parent);
+        if let Err(i) = node.necessary_children.binary_search(&child) {
+            node.necessary_children.insert(i, child);
+        }
+        self.ensure_height_increases(child, parent)
+    }
+
     fn get_mut_or_default(&mut self, id: T) -> &mut Node<T> {
         if !self.nodes.contains_key(id) {
             self.nodes.insert(id, Default::default());
