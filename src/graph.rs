@@ -117,13 +117,6 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         )
     }
 
-
-    pub fn parents<'a>(&'a self, node_id: T) -> Option<impl std::iter::Iterator<Item = T>> {
-        // TODO should get rid of this fn
-        unimplemented!();
-        Some(vec![].into_iter())
-    }
-
     pub fn necessary_children(&self, node_id: T) -> Vec<T> {
         unimplemented!()
     }

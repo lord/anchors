@@ -367,7 +367,7 @@ impl Engine {
     // skip_self = false indicates node has not yet been recalculated
     fn mark_dirty(&mut self, node_id: NodeNum, skip_self: bool) {
         if skip_self {
-            if let Some(parents) = self.graph.parents(node_id) {
+            if let Some(parents) = self.graph.empty_clean_parents(node_id) {
                 self.queue.reserve(parents.size_hint().0);
                 for parent in parents {
                     // TODO still calling dirty twice on observed relationships
@@ -381,11 +381,6 @@ impl Engine {
                     self.queue.push(parent);
                 }
             }
-            for parent in &self.queue {
-                if self.graph.edge(node_id, *parent) == graph::EdgeState::Clean {
-                    self.graph.set_edge_dirty(node_id, *parent);
-                }
-            }
         } else {
             self.queue.push(node_id);
         };
@@ -396,7 +391,7 @@ impl Engine {
             } else if self.to_recalculate.state(next) == NodeState::Ready {
                 self.to_recalculate.needs_recalc(next);
                 let start_i = self.queue.len();
-                if let Some(parents) = self.graph.parents(next) {
+                if let Some(parents) = self.graph.empty_clean_parents(next) {
                     self.queue.reserve(parents.size_hint().0);
                     for parent in parents {
                         self.nodes
@@ -407,11 +402,6 @@ impl Engine {
                             .borrow_mut()
                             .dirty(&next);
                         self.queue.push(parent);
-                    }
-                }
-                for parent in &self.queue[start_i..] {
-                    if self.graph.edge(node_id, *parent) == graph::EdgeState::Clean {
-                        self.graph.set_edge_dirty(node_id, *parent);
                     }
                 }
             };
