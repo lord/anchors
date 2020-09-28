@@ -385,10 +385,7 @@ impl Engine {
     }
 
     fn mark_node_for_recalculation(&mut self, node_id: NodeNum) {
-        if self.to_recalculate.state(node_id) != NodeState::PendingRecalc {
-            self.to_recalculate
-                .queue_recalc(self.graph.height(node_id), node_id);
-        }
+        self.to_recalculate.queue_recalc(self.graph.height(node_id), node_id);
     }
 }
 

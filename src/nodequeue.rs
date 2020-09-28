@@ -22,10 +22,10 @@ impl<T: Key> NodeQueue<T> {
     }
 
     pub fn queue_recalc(&mut self, height: usize, node: T) {
-        if self.states.get(node.clone()) == Some(&NodeState::PendingRecalc) {
-            panic!("node already queued for recalc");
+        let old = self.states.insert(node.clone(), NodeState::PendingRecalc);
+        if old == Some(NodeState::PendingRecalc) {
+            return;
         }
-        self.states.insert(node.clone(), NodeState::PendingRecalc);
         self.heap.insert(height, node);
     }
 
