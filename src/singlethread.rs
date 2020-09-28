@@ -340,23 +340,6 @@ impl Engine {
         }
     }
 
-    fn panic_if_loop(&self, res: Result<(), Vec<NodeNum>>) {
-        if let Err(loop_ids) = res {
-            let mut debug_str = "".to_string();
-            for id in &loop_ids {
-                let name = self
-                    .nodes
-                    .borrow()
-                    .get(*id)
-                    .map(|node| node.debug_info.to_string())
-                    .unwrap_or("(unknown node)".to_string());
-                debug_str.push_str("\n-> ");
-                debug_str.push_str(&name);
-            }
-            panic!("loop detected:{}\n", debug_str);
-        }
-    }
-
     // skip_self = true indicates output has *definitely* changed, but node has been recalculated
     // skip_self = false indicates node has not yet been recalculated
     fn mark_dirty(&mut self, node_id: NodeNum, skip_self: bool) {
@@ -515,44 +498,51 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
         anchor: &Anchor<O, Self::Engine>,
         necessary: bool,
     ) -> Poll {
-        let height_increases =
-            self.engine.graph.height(anchor.data.num) < self.engine.graph.height(self.node_num);
+        let height_already_increased = match self.engine.graph.ensure_height_increases(anchor.data.num, self.node_num) {
+            Ok(v) => v,
+            Err(cycle) => {
+                let mut debug_str = "".to_string();
+                for id in &cycle {
+                    let name = self
+                        .engine
+                        .nodes
+                        .borrow()
+                        .get(*id)
+                        .map(|node| node.debug_info.to_string())
+                        .unwrap_or("(unknown node)".to_string());
+                    debug_str.push_str("\n-> ");
+                    debug_str.push_str(&name);
+                }
+                panic!("loop detected:{}\n", debug_str);
+            }
+        };
+
         let self_is_necessary =
             self.engine.check_observed(self.node_num) != ObservedState::Unnecessary;
-        if !height_increases {
-            let res = self
-                .engine
-                .graph
-                .ensure_height_increases(anchor.data.num, self.node_num);
-            self.engine.panic_if_loop(res);
-        }
 
         if self.engine.to_recalculate.state(anchor.data.num) != NodeState::Ready {
             self.pending_on_anchor_get = true;
             self.engine.mark_node_for_recalculation(anchor.data.num);
             if necessary && self_is_necessary {
-                let res = self.engine.graph.set_edge_necessary(
+                self.engine.graph.set_edge_necessary(
                     anchor.data.num,
                     self.node_num,
                 );
-                self.engine.panic_if_loop(res);
             }
             Poll::Pending
-        } else if !height_increases {
+        } else if !height_already_increased {
             self.pending_on_anchor_get = true;
             Poll::Pending
         } else {
-            let res = self.engine.graph.set_edge_clean(
+            self.engine.graph.set_edge_clean(
                 anchor.data.num,
                 self.node_num,
             );
-            self.engine.panic_if_loop(res);
             if necessary && self_is_necessary {
-                let res = self.engine.graph.set_edge_necessary(
+                self.engine.graph.set_edge_necessary(
                     anchor.data.num,
                     self.node_num,
                 );
-                self.engine.panic_if_loop(res);
             }
             let nodes = self.engine.nodes.borrow();
             if nodes.get(anchor.data.num).unwrap().last_update > nodes.get(self.node_num).unwrap().last_ready {

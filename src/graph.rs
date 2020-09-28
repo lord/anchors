@@ -42,20 +42,23 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         }
     }
 
-    pub fn ensure_height_increases(&mut self, from: T, to: T) -> Result<(), Vec<T>> {
-        self.set_min_height(to, self.height(from) + 1)
+    /// Returns Ok(true) if height was already increasing, Ok(false) if was not already increasing, and Err if there's a cycle.
+    /// The error message is the list of node ids in the cycle.
+    pub fn ensure_height_increases(&mut self, from: T, to: T) -> Result<bool, Vec<T>> {
+        self.get_mut_or_default(from).visited = true;
+        let res = self.set_min_height(to, self.height(from) + 1);
+        self.get_mut_or_default(from).visited = false;
+        res
     }
 
-    pub fn set_edge_clean(&mut self, child: T, parent: T) -> Result<(), Vec<T>> {
+    pub fn set_edge_clean(&mut self, child: T, parent: T) {
         let node = self.get_mut_or_default(child);
         if let Err(i) = node.clean_parents.binary_search(&parent) {
             node.clean_parents.insert(i, parent);
-            return self.ensure_height_increases(child, parent);
         }
-        Ok(())
     }
 
-    pub fn set_edge_necessary(&mut self, child: T, parent: T) -> Result<(), Vec<T>> {
+    pub fn set_edge_necessary(&mut self, child: T, parent: T) {
         let node = self.get_mut_or_default(parent);
         if let Err(i) = node.necessary_children.binary_search(&child) {
             node.necessary_children.insert(i, child);
@@ -63,9 +66,7 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
                 let node = self.get_mut_or_default(child);
                 node.necessary_count += 1;
             }
-            return self.ensure_height_increases(child, parent);
         }
-        Ok(())
     }
 
     pub fn set_edge_unnecessary(&mut self, child: T, parent: T) {
@@ -157,13 +158,14 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
     /// is detected, returns a vector of the nodes IDs that form a loop; the caller should
     /// consider the graph to be subsequently invalid and either create a fresh one or panic.
     // TODO this still has a bug when reporting loops where it may report more items than just what's available
-    pub fn set_min_height(&mut self, node_id: T, min_height: usize) -> Result<(), Vec<T>> {
+    pub fn set_min_height(&mut self, node_id: T, min_height: usize) -> Result<bool, Vec<T>> {
         let node = self.get_mut_or_default(node_id);
         if node.visited {
             return Err(vec![node_id]);
         }
         node.visited = true;
-        if node.height < min_height {
+        let needs_increase = node.height < min_height;
+        if needs_increase {
             node.height = min_height;
             for child in node.clean_parents.clone().iter() {
                 if let Err(mut loop_ids) = self.set_min_height(*child, min_height + 1) {
@@ -173,7 +175,7 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
             }
         }
         self.get_mut_or_default(node_id).visited = false;
-        Ok(())
+        Ok(!needs_increase)
     }
 }
 
@@ -206,7 +208,9 @@ mod test {
         assert_eq!(false, graph.is_necessary(k(1)));
         assert_eq!(false, graph.is_necessary(k(2)));
 
-        graph.set_edge_clean(k(1), k(2)).unwrap();
+        assert_eq!(Ok(false), graph.ensure_height_increases(k(1), k(2)));
+        assert_eq!(Ok(true), graph.ensure_height_increases(k(1), k(2)));
+        graph.set_edge_clean(k(1), k(2));
 
         assert_eq!(empty, to_vec(graph.necessary_children(k(1))));
         assert_eq!(vec![k(2)], to_vec(graph.clean_parents(k(1))));
@@ -215,7 +219,8 @@ mod test {
         assert_eq!(false, graph.is_necessary(k(1)));
         assert_eq!(false, graph.is_necessary(k(2)));
 
-        graph.set_edge_necessary(k(1), k(2)).unwrap();
+        assert_eq!(Ok(true), graph.ensure_height_increases(k(1), k(2)));
+        graph.set_edge_necessary(k(1), k(2));
 
         assert_eq!(empty, to_vec(graph.necessary_children(k(1))));
         assert_eq!(vec![k(2)], to_vec(graph.clean_parents(k(1))));
@@ -251,13 +256,17 @@ mod test {
         assert_eq!(0, graph.height(k(2)));
         assert_eq!(0, graph.height(k(3)));
 
-        graph.set_edge_clean(k(2), k(3)).unwrap();
+        assert_eq!(Ok(false), graph.ensure_height_increases(k(2), k(3)));
+        assert_eq!(Ok(true), graph.ensure_height_increases(k(2), k(3)));
+        graph.set_edge_clean(k(2), k(3));
 
         assert_eq!(0, graph.height(k(1)));
         assert_eq!(0, graph.height(k(2)));
         assert_eq!(1, graph.height(k(3)));
 
-        graph.set_edge_clean(k(1), k(2)).unwrap();
+        assert_eq!(Ok(false), graph.ensure_height_increases(k(1), k(2)));
+        assert_eq!(Ok(true), graph.ensure_height_increases(k(1), k(2)));
+        graph.set_edge_clean(k(1), k(2));
 
         assert_eq!(0, graph.height(k(1)));
         assert_eq!(1, graph.height(k(2)));
@@ -269,13 +278,15 @@ mod test {
         assert_eq!(1, graph.height(k(2)));
         assert_eq!(2, graph.height(k(3)));
 
-        graph.set_min_height(k(1), 10).unwrap();
+        assert_eq!(Ok(false), graph.set_min_height(k(1), 10));
+        assert_eq!(Ok(true), graph.set_min_height(k(1), 10));
 
         assert_eq!(10, graph.height(k(1)));
         assert_eq!(1, graph.height(k(2)));
         assert_eq!(2, graph.height(k(3)));
 
-        graph.set_min_height(k(2), 5).unwrap();
+        assert_eq!(Ok(false), graph.set_min_height(k(2), 5));
+        assert_eq!(Ok(true), graph.set_min_height(k(2), 5));
 
         assert_eq!(10, graph.height(k(1)));
         assert_eq!(5, graph.height(k(2)));
@@ -285,20 +296,26 @@ mod test {
     #[test]
     fn cycles_cause_error() {
         let mut graph = MetadataGraph::<DefaultKey>::new();
-        graph.set_edge_clean(k(2), k(3)).unwrap();
+        graph.ensure_height_increases(k(2), k(3)).unwrap();
+        graph.set_edge_clean(k(2), k(3));
         let loop_ids = graph
-            .set_edge_clean(k(3), k(2))
+            .ensure_height_increases(k(3), k(2))
             .unwrap_err();
-        assert!(&loop_ids == &[k(2), k(3), k(2)] || &loop_ids == &[k(3), k(2), k(3)]);
+        assert!(&loop_ids == &[k(2), k(3)] || &loop_ids == &[k(3), k(2)]);
     }
 
     #[test]
     fn non_cycles_wont_cause_errors() {
         let mut graph = MetadataGraph::<DefaultKey>::new();
-        graph.set_edge_clean(k(10), k(20)).unwrap();
-        graph.set_edge_clean(k(20), k(30)).unwrap();
-        graph.set_edge_clean(k(10), k(21)).unwrap();
-        graph.set_edge_clean(k(21), k(30)).unwrap();
-        graph.set_edge_clean(k(2), k(10)).unwrap();
+        graph.ensure_height_increases(k(10), k(20)).unwrap();
+        graph.set_edge_clean(k(10), k(20));
+        graph.ensure_height_increases(k(20), k(30)).unwrap();
+        graph.set_edge_clean(k(20), k(30));
+        graph.ensure_height_increases(k(10), k(21)).unwrap();
+        graph.set_edge_clean(k(10), k(21));
+        graph.ensure_height_increases(k(21), k(30)).unwrap();
+        graph.set_edge_clean(k(21), k(30));
+        graph.ensure_height_increases(k(2), k(10)).unwrap();
+        graph.set_edge_clean(k(2), k(10));
     }
 }

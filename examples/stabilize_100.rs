@@ -2,7 +2,7 @@ use anchors::{singlethread::Engine, AnchorExt, Var, VarSetter, Anchor};
 
 const NODE_COUNT: u64 = 100;
 const ITER_COUNT: u64 = 1000000;
-const OBSERVED: bool = false;
+const OBSERVED: bool = true;
 
 fn main() {
     let mut engine = Engine::new_with_max_height(128);
