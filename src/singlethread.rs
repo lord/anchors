@@ -6,6 +6,8 @@
 //! Air, likely somewhat more if single node has a significant number of parents or children. Hopefully
 //! this will significantly improve over the coming months.
 
+mod graph2;
+
 use crate::nodequeue::{NodeQueue, NodeState};
 use crate::refcounter::RefCounter;
 use crate::{graph, Anchor, AnchorInner, OutputContext, Poll, UpdateContext};
@@ -14,7 +16,6 @@ use std::any::Any;
 use std::cell::RefCell;
 use std::panic::Location;
 use std::rc::Rc;
-use typed_arena::Arena;
 use std::cell::Cell;
 
 use std::num::NonZeroU64;
@@ -114,10 +115,6 @@ struct Node {
     last_ready: Option<Generation>,
     /// tracks the generation when this Node last polled as Updated
     last_update: Option<Generation>,
-}
-
-struct Node2<'a> {
-    parent: Cell<Option<&'a Node2<'a>>>,
 }
 
 impl Engine {
