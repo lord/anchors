@@ -488,7 +488,7 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
         let unsafe_borrow = unsafe { target_node.anchor.as_ptr().as_ref().unwrap() };
         let output: &O = unsafe_borrow
             .output(&mut EngineContext {
-                engine: &self.engine,
+                engine: self.engine,
                 node_num: anchor.data.num,
             })
             .downcast_ref()
