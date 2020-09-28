@@ -437,7 +437,7 @@ impl crate::DirtyHandle for DirtyHandle {
 }
 
 struct EngineContext<'eng> {
-    engine: &'eng &'eng mut Engine,
+    engine: &'eng Engine,
     node_num: NodeNum,
 }
 
