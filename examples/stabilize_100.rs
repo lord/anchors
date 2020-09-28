@@ -1,7 +1,7 @@
 use anchors::{singlethread::Engine, AnchorExt, Var, VarSetter, Anchor};
 
 const NODE_COUNT: u64 = 100;
-const ITER_COUNT: u64 = 1000000;
+const ITER_COUNT: u64 = 500000;
 const OBSERVED: bool = true;
 
 fn main() {

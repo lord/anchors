@@ -363,7 +363,7 @@ impl Engine {
         };
 
         while let Some(next) = self.queue.pop() {
-            if self.graph.is_necessary(next) || self.nodes.borrow()[next].observed {
+            if self.check_observed(next) != ObservedState::Unnecessary {
                 self.mark_node_for_recalculation(next);
             } else if self.to_recalculate.state(next) == NodeState::Ready {
                 self.to_recalculate.needs_recalc(next);
