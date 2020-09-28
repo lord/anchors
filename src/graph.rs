@@ -45,10 +45,13 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
     /// Returns Ok(true) if height was already increasing, Ok(false) if was not already increasing, and Err if there's a cycle.
     /// The error message is the list of node ids in the cycle.
     pub fn ensure_height_increases(&mut self, from: T, to: T) -> Result<bool, Vec<T>> {
+        if self.height(from) < self.height(to) {
+            return Ok(true);
+        }
         self.get_mut_or_default(from).visited = true;
         let res = self.set_min_height(to, self.height(from) + 1);
         self.get_mut_or_default(from).visited = false;
-        res
+        res.map(|()| false)
     }
 
     pub fn set_edge_clean(&mut self, child: T, parent: T) {
@@ -158,14 +161,13 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
     /// is detected, returns a vector of the nodes IDs that form a loop; the caller should
     /// consider the graph to be subsequently invalid and either create a fresh one or panic.
     // TODO this still has a bug when reporting loops where it may report more items than just what's available
-    pub fn set_min_height(&mut self, node_id: T, min_height: usize) -> Result<bool, Vec<T>> {
+    pub fn set_min_height(&mut self, node_id: T, min_height: usize) -> Result<(), Vec<T>> {
         let node = self.get_mut_or_default(node_id);
         if node.visited {
             return Err(vec![node_id]);
         }
         node.visited = true;
-        let needs_increase = node.height < min_height;
-        if needs_increase {
+        if node.height < min_height {
             node.height = min_height;
             for child in node.clean_parents.clone().iter() {
                 if let Err(mut loop_ids) = self.set_min_height(*child, min_height + 1) {
@@ -175,7 +177,7 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
             }
         }
         self.get_mut_or_default(node_id).visited = false;
-        Ok(!needs_increase)
+        Ok(())
     }
 }
 
@@ -278,15 +280,13 @@ mod test {
         assert_eq!(1, graph.height(k(2)));
         assert_eq!(2, graph.height(k(3)));
 
-        assert_eq!(Ok(false), graph.set_min_height(k(1), 10));
-        assert_eq!(Ok(true), graph.set_min_height(k(1), 10));
+        graph.set_min_height(k(1), 10).unwrap();
 
         assert_eq!(10, graph.height(k(1)));
         assert_eq!(1, graph.height(k(2)));
         assert_eq!(2, graph.height(k(3)));
 
-        assert_eq!(Ok(false), graph.set_min_height(k(2), 5));
-        assert_eq!(Ok(true), graph.set_min_height(k(2), 5));
+        graph.set_min_height(k(2), 5).unwrap();
 
         assert_eq!(10, graph.height(k(1)));
         assert_eq!(5, graph.height(k(2)));
