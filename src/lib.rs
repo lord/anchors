@@ -37,7 +37,7 @@ pub enum Poll {
 /// internal recomputation graph node this corresponds to. You should rarely create Anchors yourself;
 /// instead use one of the built-in functions like `Var::new` to create one, or create derivative Anchors
 /// with one of the `AnchorExt` methods.
-pub struct Anchor<O, E: Engine + ?Sized> {
+pub struct Anchor<O, E: Engine> {
     data: E::AnchorHandle,
     phantom: PhantomData<O>,
 }
@@ -86,7 +86,7 @@ pub trait AnchorHandle: Sized + Clone {
 /// The core engine trait implemented by each recalculation engine. Allows mounting an `AnchorInner`
 /// into an actual `Anchor`, although this mounting should usually be done by each `AnchorInner`
 /// implementation directly.
-pub trait Engine {
+pub trait Engine: Sized {
     type AnchorHandle: AnchorHandle;
     type DirtyHandle: DirtyHandle;
 
