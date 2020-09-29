@@ -23,6 +23,7 @@ pub struct NodePtrs {
 #[derive(Clone, Copy)]
 pub struct NodeGuard<'a> {
     inside: &'a Node,
+    // hack to make NodeGuard invariant
     f: PhantomData<&'a mut &'a ()>,
 }
 
@@ -33,12 +34,14 @@ impl <'a> std::ops::Deref for NodeGuard<'a> {
     }
 }
 
-pub fn set_parent<'a>(me: NodeGuard<'a>, parent: Option<NodeGuard<'a>>) {
-    me.inside.ptrs.parent.set(parent.map(|r| r.inside as *const Node))
-}
+impl <'a> NodeGuard<'a> {
+    pub fn set_parent(self, parent: Option<NodeGuard<'a>>) {
+        self.inside.ptrs.parent.set(parent.map(|r| r.inside as *const Node))
+    }
 
-pub fn parent<'a>(me: NodeGuard<'a>) -> Option<NodeGuard<'a>> {
-    me.inside.ptrs.parent.get().map(|ptr| NodeGuard {inside: unsafe {&*ptr}, f: PhantomData})
+    pub fn parent(self) -> Option<NodeGuard<'a>> {
+        self.inside.ptrs.parent.get().map(|ptr| NodeGuard {inside: unsafe {&*ptr}, f: self.f})
+    }
 }
 
 impl Graph2 {
@@ -73,7 +76,7 @@ fn test_fails() {
             observed: Cell::new(false),
             ptrs: NodePtrs::default(),
         });
-        set_parent(node_b, Some(node_b2));
+        node_b.set_parent(Some(node_b2));
         // set_parent(node_c.unwrap(), Some(node_b));
     }
 
