@@ -72,13 +72,14 @@ pub struct Engine<'eng> {
     generation: Generation,
 }
 
+#[derive(Clone)]
 struct Mounter<'a> {
     nodes: Rc<RefCell<SlotMap<NodeNum, Node<'a>>>>,
     refcounter: RefCounter<NodeNum>,
 }
 
 impl <'e> crate::Engine for Engine<'e> {
-    type AnchorHandle = AnchorHandle;
+    type AnchorHandle = AnchorHandle<'e>;
     type DirtyHandle = DirtyHandle;
 
     fn mount<I: AnchorInner<Engine<'e>>>(inner: I) -> Anchor<I::Output, Self> {
@@ -139,6 +140,10 @@ impl <'e> Engine<'e> {
         Anchor::new(AnchorHandle {
             num,
             refcounter: self.refcounter.clone(),
+            mounter: Mounter {
+                nodes:self.nodes.clone(),
+                refcounter:self.refcounter.clone(),
+            },
         })
     }
 
@@ -412,28 +417,29 @@ impl <'e> Engine<'e> {
 }
 
 /// Singlethread's implementation of Anchors' `AnchorHandle`, the engine-specific handle that sits inside an `Anchor`.
-#[derive(Debug)]
-pub struct AnchorHandle {
+pub struct AnchorHandle<'eng> {
     num: NodeNum,
     refcounter: RefCounter<NodeNum>,
+    mounter: Mounter<'eng>,
 }
 
-impl Clone for AnchorHandle {
+impl Clone for AnchorHandle<'_> {
     fn clone(&self) -> Self {
         self.refcounter.increment(self.num);
         AnchorHandle {
             num: self.num,
             refcounter: self.refcounter.clone(),
+            mounter: self.mounter.clone(),
         }
     }
 }
 
-impl Drop for AnchorHandle {
+impl Drop for AnchorHandle<'_> {
     fn drop(&mut self) {
         self.refcounter.decrement(self.num);
     }
 }
-impl crate::AnchorHandle for AnchorHandle {
+impl crate::AnchorHandle for AnchorHandle<'_> {
     type Token = NodeNum;
     fn token(&self) -> NodeNum {
         self.num
