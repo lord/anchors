@@ -9,7 +9,7 @@ pub struct Graph2 {
     nodes: Arena<Node>,
 }
 
-pub (super) struct Node {
+pub struct Node {
     pub observed: Cell<bool>,
     // pub debug_info: AnchorDebugInfo,
     // pub anchor: Rc<RefCell<dyn GenericAnchor>>,
@@ -23,7 +23,14 @@ pub struct NodePtrs {
 #[derive(Clone)]
 pub struct NodeGuard<'a> {
     inside: &'a Node,
-    f: PhantomData<fn(&'a ())>,
+    f: PhantomData<&'a mut &'a ()>,
+}
+
+impl <'a> std::ops::Deref for NodeGuard<'a> {
+    type Target = Node;
+    fn deref(&self) -> &Node {
+        &self.inside
+    }
 }
 
 pub fn set_parent<'a>(me: NodeGuard<'a>, parent: Option<NodeGuard<'a>>) {
@@ -48,10 +55,6 @@ impl Graph2 {
     }
 }
 
-impl Drop for Graph2 {
-    fn drop(&mut self) {}
-}
-
 impl <'a> Drop for NodeGuard<'a> {
     fn drop(&mut self) {}
 }
@@ -70,11 +73,13 @@ fn test_fails() {
             observed: Cell::new(false),
             ptrs: NodePtrs::default(),
         });
-        let node_c = graph_b.insert(Node {
+        let node_d = graph_b.insert(Node {
             observed: Cell::new(false),
             ptrs: NodePtrs::default(),
         });
-        set_parent(node_c, Some(node_a));
+        let node_c = parent(node_d.clone());
+        set_parent(node_b.clone(), node_c.clone());
+        // set_parent(node_c.unwrap(), Some(node_b));
     }
 
     panic!("end");
