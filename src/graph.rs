@@ -1,20 +1,17 @@
 use slotmap::{secondary::SecondaryMap, Key};
 use std::fmt::Debug;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum EdgeState {
-    Necessary,
-    Dirty,
-    Clean,
-}
-
 #[derive(Debug, Clone)]
 struct Node<T: Eq + Copy + Debug + Key + Ord> {
-    /// These are the nodes that are updated when our value changes. If true, edge is necessary,
-    /// if false, edge is clean. A "dirty" edge is just a non-existant edge. Sorted by T.
-    parents: Vec<(T, bool)>,
-    /// These are the nodes that update us when they change. Sorted by T.
-    children: Vec<T>,
+    /// These are the parents of this node that are clean
+    clean_parents: Vec<T>,
+
+    /// These are the children of this node that are necessary by this node
+    necessary_children: Vec<T>,
+
+    /// This is the number of nodes that list this node as an necessary child
+    necessary_count: usize,
+
     /// `0` if this node has no children, otherwise `max of children's height + 1`. This number
     /// can only ever increase, so that we avoid re-updating the whole graph if the height of some
     /// child element keeps changing.
@@ -25,10 +22,11 @@ struct Node<T: Eq + Copy + Debug + Key + Ord> {
 impl<T: Eq + Copy + Debug + Key + Ord> Default for Node<T> {
     fn default() -> Self {
         Node {
-            parents: Vec::new(),
-            children: Vec::new(),
             height: 0,
             visited: false,
+            clean_parents: vec![],
+            necessary_children: vec![],
+            necessary_count: 0,
         }
     }
 }
@@ -44,51 +42,45 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         }
     }
 
-    pub fn edge(&self, from: T, to: T) -> EdgeState {
-        let node = match self.nodes.get(from) {
-            None => return EdgeState::Dirty,
-            Some(v) => v,
-        };
-        match node.parents.binary_search_by_key(&to, |v| v.0) {
-            Err(_) => EdgeState::Dirty,
-            Ok(i) if node.parents[i].1 => EdgeState::Necessary,
-            Ok(_) => EdgeState::Clean,
+    /// Returns Ok(true) if height was already increasing, Ok(false) if was not already increasing, and Err if there's a cycle.
+    /// The error message is the list of node ids in the cycle.
+    pub fn ensure_height_increases(&mut self, from: T, to: T) -> Result<bool, Vec<T>> {
+        if self.height(from) < self.height(to) {
+            return Ok(true);
+        }
+        self.get_mut_or_default(from).visited = true;
+        let res = self.set_min_height(to, self.height(from) + 1);
+        self.get_mut_or_default(from).visited = false;
+        res.map(|()| false)
+    }
+
+    pub fn set_edge_clean(&mut self, child: T, parent: T) {
+        let node = self.get_mut_or_default(child);
+        if let Err(i) = node.clean_parents.binary_search(&parent) {
+            node.clean_parents.insert(i, parent);
         }
     }
 
-    pub fn ensure_height_increases(&mut self, from: T, to: T) -> Result<(), Vec<T>> {
-        self.set_min_height(to, self.height(from) + 1)
-    }
-
-    pub fn set_edge_dirty(&mut self, from: T, to: T) {
-        self.nodes.get_mut(from).map(|v| {
-            if let Ok(i) = v.parents.binary_search_by_key(&to, |v| v.0) {
-                v.parents.remove(i);
-            }
-        });
-        self.nodes.get_mut(to).map(|v| {
-            if let Ok(i) = v.children.binary_search(&from) {
-                v.children.remove(i);
-            }
-        });
-    }
-
-    pub fn set_edge_clean(&mut self, from: T, to: T, necessary: bool) -> Result<(), Vec<T>> {
-        {
-            let node = self.get_mut_or_default(from);
-            match node.parents.binary_search_by_key(&to, |v| v.0) {
-                Ok(i) => node.parents[i].1 = necessary,
-                Err(i) => node.parents.insert(i, (to, necessary)),
+    pub fn set_edge_necessary(&mut self, child: T, parent: T) {
+        let node = self.get_mut_or_default(parent);
+        if let Err(i) = node.necessary_children.binary_search(&child) {
+            node.necessary_children.insert(i, child);
+            {
+                let node = self.get_mut_or_default(child);
+                node.necessary_count += 1;
             }
         }
-        {
-            let node = self.get_mut_or_default(to);
-            match node.children.binary_search(&from) {
-                Ok(_) => {}
-                Err(i) => node.children.insert(i, from),
+    }
+
+    pub fn set_edge_unnecessary(&mut self, child: T, parent: T) {
+        let node = self.get_mut_or_default(parent);
+        if let Ok(i) = node.necessary_children.binary_search(&child) {
+            node.necessary_children.remove(i);
+            {
+                let node = self.get_mut_or_default(child);
+                node.necessary_count -= 1;
             }
         }
-        self.ensure_height_increases(from, to)
     }
 
     fn get_mut_or_default(&mut self, id: T) -> &mut Node<T> {
@@ -99,71 +91,56 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
     }
 
     pub fn remove(&mut self, node_id: T) {
-        let node = match self.nodes.get(node_id) {
-            Some(v) => v.clone(),
-            None => return,
-        };
-
-        for child in node.children {
-            // ok to unwrap — not possible to loop when removing an edge
-            self.set_edge_dirty(child, node_id);
-        }
-        for (parent, _) in node.parents {
-            // ok to unwrap — not possible to loop when removing an edge
-            self.set_edge_dirty(node_id, parent);
-        }
-
+        self.drain_necessary_children(node_id);
         self.nodes.remove(node_id);
-    }
-
-    #[allow(dead_code)]
-    pub fn necessary_parents<'a>(
-        &'a self,
-        node_id: T,
-    ) -> Option<impl std::iter::Iterator<Item = T> + 'a> {
-        let node = match self.nodes.get(node_id) {
-            Some(v) => v,
-            None => return None,
-        };
-        Some(
-            node.parents
-                .iter()
-                .filter_map(|(v, necessary)| if *necessary { Some(v.clone()) } else { None }),
-        )
     }
 
     #[allow(dead_code)]
     pub fn clean_parents<'a>(
         &'a self,
         node_id: T,
-    ) -> Option<impl std::iter::Iterator<Item = T> + 'a> {
+    ) -> Option<impl std::iter::Iterator<Item = &'a T>> {
         let node = match self.nodes.get(node_id) {
             Some(v) => v,
             None => return None,
         };
         Some(
-            node.parents
-                .iter()
-                .filter_map(|(v, necessary)| if !*necessary { Some(v.clone()) } else { None }),
+            node.clean_parents.iter()
         )
     }
 
-    pub fn parents<'a>(&'a self, node_id: T) -> Option<impl std::iter::Iterator<Item = T> + 'a> {
+    pub fn drain_clean_parents<'a>(
+        &'a mut self,
+        node_id: T,
+    ) -> Option<impl std::iter::Iterator<Item = T> + 'a> {
+        let node = match self.nodes.get_mut(node_id) {
+            Some(v) => v,
+            None => return None,
+        };
+        Some(node.clean_parents.drain(..))
+    }
+
+    #[allow(dead_code)]
+    pub fn necessary_children<'a>(&'a self, node_id: T) -> Option<impl std::iter::Iterator<Item = &'a T>> {
         let node = match self.nodes.get(node_id) {
             Some(v) => v,
             None => return None,
         };
-        Some(node.parents.iter().map(|(v, _)| v.clone()))
+        Some(node.necessary_children.iter())
     }
 
-    #[allow(dead_code)]
-    pub fn necessary_children(&self, node_id: T) -> Vec<T> {
-        self.get_children(node_id, true)
-    }
-
-    #[allow(dead_code)]
-    pub fn clean_children(&self, node_id: T) -> Vec<T> {
-        self.get_children(node_id, false)
+    pub fn drain_necessary_children<'a>(&'a mut self, node_id: T) -> Option<Vec<T>> {
+        let node = match self.nodes.get_mut(node_id) {
+            Some(v) => v,
+            None => return None,
+        };
+        let necessary_children = std::mem::replace(&mut node.necessary_children, vec![]);
+        for child in &necessary_children {
+            if let Some(child_node) = self.nodes.get_mut(*child) {
+                child_node.necessary_count -= 1;
+            }
+        }
+        Some(necessary_children)
     }
 
     pub fn is_necessary(&self, node_id: T) -> bool {
@@ -172,7 +149,7 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
             None => return false,
         };
 
-        node.parents.iter().any(|(_v, necessary)| *necessary)
+        node.necessary_count > 0
     }
 
     pub fn height(&self, node_id: T) -> usize {
@@ -192,7 +169,7 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         node.visited = true;
         if node.height < min_height {
             node.height = min_height;
-            for (child, _) in node.parents.clone().iter() {
+            for child in node.clean_parents.clone().iter() {
                 if let Err(mut loop_ids) = self.set_min_height(*child, min_height + 1) {
                     loop_ids.push(node_id);
                     return Err(loop_ids);
@@ -202,36 +179,23 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         self.get_mut_or_default(node_id).visited = false;
         Ok(())
     }
-
-    fn get_children(&self, node_id: T, necessary: bool) -> Vec<T> {
-        let node = match self.nodes.get(node_id) {
-            Some(v) => v,
-            None => return vec![],
-        };
-        node.children
-            .iter()
-            .filter(|id| {
-                let i = self.nodes[**id]
-                    .parents
-                    .binary_search_by_key(&node_id, |v| v.0)
-                    .unwrap();
-                necessary == self.nodes[**id].parents[i].1
-            })
-            .cloned()
-            .collect()
-    }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
     use slotmap::{DefaultKey, KeyData};
+    use std::ops::Deref;
 
-    fn to_vec<I: std::iter::Iterator>(iter: Option<I>) -> Vec<I::Item> {
+    fn to_vec<I: std::iter::Iterator>(iter: Option<I>) -> Vec<<I::Item as Deref>::Target> where I::Item: Deref, <I::Item as Deref>::Target : Sized + Copy {
         match iter {
             None => vec![],
-            Some(iter) => iter.collect(),
+            Some(iter) => iter.map(|v| *v).collect(),
         }
+    }
+
+    fn k(num: u64) -> DefaultKey {
+        KeyData::from_ffi(num).into()
     }
 
     #[test]
@@ -239,68 +203,51 @@ mod test {
         let mut graph = MetadataGraph::<DefaultKey>::new();
         let empty: Vec<DefaultKey> = vec![];
 
-        assert_eq!(EdgeState::Dirty, graph.edge(k(1), k(2)));
-        assert_eq!(EdgeState::Dirty, graph.edge(k(2), k(1)));
-        assert_eq!(empty, to_vec(graph.necessary_parents(k(1))));
-        assert_eq!(empty, graph.necessary_children(k(1)));
+        assert_eq!(empty, to_vec(graph.necessary_children(k(1))));
         assert_eq!(empty, to_vec(graph.clean_parents(k(1))));
-        assert_eq!(empty, graph.clean_children(k(1)));
-        assert_eq!(empty, to_vec(graph.necessary_parents(k(2))));
-        assert_eq!(empty, graph.necessary_children(k(2)));
+        assert_eq!(empty, to_vec(graph.necessary_children(k(2))));
         assert_eq!(empty, to_vec(graph.clean_parents(k(2))));
-        assert_eq!(empty, graph.clean_children(k(2)));
         assert_eq!(false, graph.is_necessary(k(1)));
         assert_eq!(false, graph.is_necessary(k(2)));
 
-        graph.set_edge_clean(k(1), k(2), false).unwrap();
+        assert_eq!(Ok(false), graph.ensure_height_increases(k(1), k(2)));
+        assert_eq!(Ok(true), graph.ensure_height_increases(k(1), k(2)));
+        graph.set_edge_clean(k(1), k(2));
 
-        assert_eq!(EdgeState::Clean, graph.edge(k(1), k(2)));
-        assert_eq!(EdgeState::Dirty, graph.edge(k(2), k(1)));
-        assert_eq!(empty, to_vec(graph.necessary_parents(k(1))));
-        assert_eq!(empty, graph.necessary_children(k(1)));
+        assert_eq!(empty, to_vec(graph.necessary_children(k(1))));
         assert_eq!(vec![k(2)], to_vec(graph.clean_parents(k(1))));
-        assert_eq!(empty, graph.clean_children(k(1)));
-        assert_eq!(empty, to_vec(graph.necessary_parents(k(2))));
-        assert_eq!(empty, graph.necessary_children(k(2)));
+        assert_eq!(empty, to_vec(graph.necessary_children(k(2))));
         assert_eq!(empty, to_vec(graph.clean_parents(k(2))));
-        assert_eq!(vec![k(1)], graph.clean_children(k(2)));
         assert_eq!(false, graph.is_necessary(k(1)));
         assert_eq!(false, graph.is_necessary(k(2)));
 
-        graph.set_edge_clean(k(1), k(2), true).unwrap();
+        assert_eq!(Ok(true), graph.ensure_height_increases(k(1), k(2)));
+        graph.set_edge_necessary(k(1), k(2));
 
-        assert_eq!(EdgeState::Necessary, graph.edge(k(1), k(2)));
-        assert_eq!(EdgeState::Dirty, graph.edge(k(2), k(1)));
-        assert_eq!(vec![k(2)], to_vec(graph.necessary_parents(k(1))));
-        assert_eq!(empty, graph.necessary_children(k(1)));
-        assert_eq!(empty, to_vec(graph.clean_parents(k(1))));
-        assert_eq!(empty, graph.clean_children(k(1)));
-        assert_eq!(empty, to_vec(graph.necessary_parents(k(2))));
-        assert_eq!(vec![k(1)], graph.necessary_children(k(2)));
+        assert_eq!(empty, to_vec(graph.necessary_children(k(1))));
+        assert_eq!(vec![k(2)], to_vec(graph.clean_parents(k(1))));
+        assert_eq!(vec![k(1)], to_vec(graph.necessary_children(k(2))));
         assert_eq!(empty, to_vec(graph.clean_parents(k(2))));
-        assert_eq!(empty, graph.clean_children(k(2)));
         assert_eq!(true, graph.is_necessary(k(1)));
         assert_eq!(false, graph.is_necessary(k(2)));
 
-        graph.set_edge_dirty(k(1), k(2));
+        graph.drain_clean_parents(k(1));
 
-        assert_eq!(EdgeState::Dirty, graph.edge(k(1), k(2)));
-        assert_eq!(EdgeState::Dirty, graph.edge(k(2), k(1)));
-        assert_eq!(empty, to_vec(graph.necessary_parents(k(1))));
-        assert_eq!(empty, graph.necessary_children(k(1)));
+        assert_eq!(empty, to_vec(graph.necessary_children(k(1))));
         assert_eq!(empty, to_vec(graph.clean_parents(k(1))));
-        assert_eq!(empty, graph.clean_children(k(1)));
-        assert_eq!(empty, to_vec(graph.necessary_parents(k(2))));
-        assert_eq!(empty, graph.necessary_children(k(2)));
+        assert_eq!(vec![k(1)], to_vec(graph.necessary_children(k(2))));
         assert_eq!(empty, to_vec(graph.clean_parents(k(2))));
-        assert_eq!(empty, graph.clean_children(k(2)));
+        assert_eq!(true, graph.is_necessary(k(1)));
+        assert_eq!(false, graph.is_necessary(k(2)));
 
+        graph.drain_necessary_children(k(2));
+
+        assert_eq!(empty, to_vec(graph.necessary_children(k(1))));
+        assert_eq!(empty, to_vec(graph.clean_parents(k(1))));
+        assert_eq!(empty, to_vec(graph.necessary_children(k(2))));
+        assert_eq!(empty, to_vec(graph.clean_parents(k(2))));
         assert_eq!(false, graph.is_necessary(k(1)));
         assert_eq!(false, graph.is_necessary(k(2)));
-    }
-
-    fn k(num: u64) -> DefaultKey {
-        KeyData::from_ffi(num).into()
     }
 
     #[test]
@@ -311,25 +258,23 @@ mod test {
         assert_eq!(0, graph.height(k(2)));
         assert_eq!(0, graph.height(k(3)));
 
-        graph.set_edge_dirty(k(2), k(3));
-
-        assert_eq!(0, graph.height(k(1)));
-        assert_eq!(0, graph.height(k(2)));
-        assert_eq!(0, graph.height(k(3)));
-
-        graph.set_edge_clean(k(2), k(3), true).unwrap();
+        assert_eq!(Ok(false), graph.ensure_height_increases(k(2), k(3)));
+        assert_eq!(Ok(true), graph.ensure_height_increases(k(2), k(3)));
+        graph.set_edge_clean(k(2), k(3));
 
         assert_eq!(0, graph.height(k(1)));
         assert_eq!(0, graph.height(k(2)));
         assert_eq!(1, graph.height(k(3)));
 
-        graph.set_edge_clean(k(1), k(2), false).unwrap();
+        assert_eq!(Ok(false), graph.ensure_height_increases(k(1), k(2)));
+        assert_eq!(Ok(true), graph.ensure_height_increases(k(1), k(2)));
+        graph.set_edge_clean(k(1), k(2));
 
         assert_eq!(0, graph.height(k(1)));
         assert_eq!(1, graph.height(k(2)));
         assert_eq!(2, graph.height(k(3)));
 
-        graph.set_edge_dirty(k(1), k(2));
+        graph.drain_clean_parents(k(1));
 
         assert_eq!(0, graph.height(k(1)));
         assert_eq!(1, graph.height(k(2)));
@@ -351,20 +296,26 @@ mod test {
     #[test]
     fn cycles_cause_error() {
         let mut graph = MetadataGraph::<DefaultKey>::new();
-        graph.set_edge_clean(k(2), k(3), true).unwrap();
+        graph.ensure_height_increases(k(2), k(3)).unwrap();
+        graph.set_edge_clean(k(2), k(3));
         let loop_ids = graph
-            .set_edge_clean(k(3), k(2), true)
+            .ensure_height_increases(k(3), k(2))
             .unwrap_err();
-        assert!(&loop_ids == &[k(2), k(3), k(2)] || &loop_ids == &[k(3), k(2), k(3)]);
+        assert!(&loop_ids == &[k(2), k(3)] || &loop_ids == &[k(3), k(2)]);
     }
 
     #[test]
     fn non_cycles_wont_cause_errors() {
         let mut graph = MetadataGraph::<DefaultKey>::new();
-        graph.set_edge_clean(k(10), k(20), true).unwrap();
-        graph.set_edge_clean(k(20), k(30), true).unwrap();
-        graph.set_edge_clean(k(10), k(21), true).unwrap();
-        graph.set_edge_clean(k(21), k(30), true).unwrap();
-        graph.set_edge_clean(k(2), k(10), true).unwrap();
+        graph.ensure_height_increases(k(10), k(20)).unwrap();
+        graph.set_edge_clean(k(10), k(20));
+        graph.ensure_height_increases(k(20), k(30)).unwrap();
+        graph.set_edge_clean(k(20), k(30));
+        graph.ensure_height_increases(k(10), k(21)).unwrap();
+        graph.set_edge_clean(k(10), k(21));
+        graph.ensure_height_increases(k(21), k(30)).unwrap();
+        graph.set_edge_clean(k(21), k(30));
+        graph.ensure_height_increases(k(2), k(10)).unwrap();
+        graph.set_edge_clean(k(2), k(10));
     }
 }
