@@ -29,9 +29,9 @@ impl Generation {
     }
 }
 
-thread_local! {
-    static DEFAULT_MOUNTER: RefCell<Option<Mounter>> = RefCell::new(None);
-}
+// thread_local! {
+//     static DEFAULT_MOUNTER: RefCell<Option<Mounter>> = RefCell::new(None);
+// }
 
 /// Indicates whether the node is a part of some observed calculation.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57,9 +57,9 @@ slotmap::new_key_type! {
 }
 
 /// The main execution engine of Singlethread.
-pub struct Engine {
+pub struct Engine<'eng> {
     // TODO store Nodes on heap directly?? maybe try for Rc<RefCell<SlotMap>> now
-    nodes: Rc<RefCell<SlotMap<NodeNum, Node>>>,
+    nodes: Rc<RefCell<SlotMap<NodeNum, Node<'eng>>>>,
     graph: graph::MetadataGraph<NodeNum>,
     to_recalculate: NodeQueue<NodeNum>,
     dirty_marks: Rc<RefCell<Vec<NodeNum>>>,
@@ -72,49 +72,50 @@ pub struct Engine {
     generation: Generation,
 }
 
-struct Mounter {
-    nodes: Rc<RefCell<SlotMap<NodeNum, Node>>>,
-    refcounter: RefCounter<NodeNum>,
-}
+// struct Mounter {
+//     nodes: Rc<RefCell<SlotMap<NodeNum, Node>>>,
+//     refcounter: RefCounter<NodeNum>,
+// }
 
-impl crate::Engine for Engine {
+impl crate::Engine for Engine<'_> {
     type AnchorHandle = AnchorHandle;
     type DirtyHandle = DirtyHandle;
 
-    fn mount<I: AnchorInner<Self> + 'static>(inner: I) -> Anchor<I::Output, Self> {
-        DEFAULT_MOUNTER.with(|default_mounter| {
-            let mut borrow1 = default_mounter.borrow_mut();
-            let this = borrow1
-                .as_mut()
-                .expect("no engine was initialized. did you call `Engine::new()`?");
-            let debug_info = inner.debug_info();
-            let num = this.nodes.borrow_mut().insert(Node {
-                observed: false,
-                anchor: Rc::new(RefCell::new(inner)),
-                debug_info,
-                last_ready: None,
-                last_update: None,
-            });
-            this.refcounter.create(num);
-            Anchor::new(AnchorHandle {
-                num,
-                refcounter: this.refcounter.clone(),
-            })
-        })
+    fn mount<I: AnchorInner<Self>>(inner: I) -> Anchor<I::Output, Self> {
+        unimplemented!()
+        // DEFAULT_MOUNTER.with(|default_mounter| {
+        //     let mut borrow1 = default_mounter.borrow_mut();
+        //     let this = borrow1
+        //         .as_mut()
+        //         .expect("no engine was initialized. did you call `Engine::new()`?");
+        //     let debug_info = inner.debug_info();
+        //     let num = this.nodes.borrow_mut().insert(Node {
+        //         observed: false,
+        //         anchor: Rc::new(RefCell::new(inner)),
+        //         debug_info,
+        //         last_ready: None,
+        //         last_update: None,
+        //     });
+        //     this.refcounter.create(num);
+        //     Anchor::new(AnchorHandle {
+        //         num,
+        //         refcounter: this.refcounter.clone(),
+        //     })
+        // })
     }
 }
 
-struct Node {
+struct Node<'eng> {
     observed: bool,
     debug_info: AnchorDebugInfo,
-    anchor: Rc<RefCell<dyn GenericAnchor>>,
+    anchor: Rc<RefCell<dyn GenericAnchor<'eng>>>,
     /// tracks the generation when this Node last polled as Updated or Unchanged
     last_ready: Option<Generation>,
     /// tracks the generation when this Node last polled as Updated
     last_update: Option<Generation>,
 }
 
-impl Engine {
+impl Engine<'_> {
     /// Creates a new Engine with maximum height 256.
     pub fn new() -> Self {
         Self::new_with_max_height(256)
@@ -124,11 +125,11 @@ impl Engine {
     pub fn new_with_max_height(max_height: usize) -> Self {
         let refcounter = RefCounter::new();
         let nodes = Rc::new(RefCell::new(SlotMap::with_key()));
-        let mounter = Mounter {
-            refcounter: refcounter.clone(),
-            nodes: nodes.clone(),
-        };
-        DEFAULT_MOUNTER.with(|v| *v.borrow_mut() = Some(mounter));
+        // let mounter = Mounter {
+        //     refcounter: refcounter.clone(),
+        //     nodes: nodes.clone(),
+        // };
+        // DEFAULT_MOUNTER.with(|v| *v.borrow_mut() = Some(mounter));
         Self {
             nodes,
             graph: graph::MetadataGraph::new(),
@@ -144,7 +145,7 @@ impl Engine {
     /// when *any* Anchor in the graph is retrieved. If you get an output value fairly
     /// often, it's best to mark it as Observed so that Anchors can calculate its
     /// dependencies faster.
-    pub fn mark_observed<O: 'static>(&mut self, anchor: &Anchor<O, Engine>) {
+    pub fn mark_observed<O: 'static>(&mut self, anchor: &Anchor<O, Self>) {
         self.nodes
             .borrow_mut()
             .get_mut(anchor.data.num)
@@ -158,7 +159,7 @@ impl Engine {
     /// Marks an Anchor as unobserved. If the `anchor` has parents that are necessary
     /// because `anchor` was previously observed, those parents will be unmarked as
     /// necessary.
-    pub fn mark_unobserved<O: 'static>(&mut self, anchor: &Anchor<O, Engine>) {
+    pub fn mark_unobserved<O: 'static>(&mut self, anchor: &Anchor<O, Self>) {
         self.nodes
             .borrow_mut()
             .get_mut(anchor.data.num)
@@ -182,7 +183,7 @@ impl Engine {
 
     /// Retrieves the value of an Anchor, recalculating dependencies as necessary to get the
     /// latest value.
-    pub fn get<'out, O: Clone + 'static>(&mut self, anchor: &Anchor<O, Engine>) -> O {
+    pub fn get<'out, O: Clone + 'static>(&mut self, anchor: &Anchor<O, Self>) -> O {
         // stabilize once before, since the stabilization process may mark our requested node
         // as dirty
         self.stabilize();
@@ -430,19 +431,19 @@ impl crate::DirtyHandle for DirtyHandle {
     }
 }
 
-struct EngineContext<'eng> {
-    engine: &'eng &'eng mut Engine,
+struct EngineContext<'eng, 'eng2> {
+    engine: &'eng Engine<'eng2>,
     node_num: NodeNum,
 }
 
-struct EngineContextMut<'eng> {
-    engine: &'eng mut Engine,
+struct EngineContextMut<'eng, 'eng2> {
+    engine: &'eng mut Engine<'eng2>,
     node_num: NodeNum,
     pending_on_anchor_get: bool,
 }
 
-impl<'eng> OutputContext<'eng> for EngineContext<'eng> {
-    type Engine = Engine;
+impl<'eng, 'eng2> OutputContext<'eng> for EngineContext<'eng, 'eng2> {
+    type Engine = Engine<'eng2>;
 
     fn get<'out, O: 'static>(&self, anchor: &Anchor<O, Self::Engine>) -> &'out O
     where
@@ -466,8 +467,8 @@ impl<'eng> OutputContext<'eng> for EngineContext<'eng> {
     }
 }
 
-impl<'eng> UpdateContext for EngineContextMut<'eng> {
-    type Engine = Engine;
+impl<'eng, 'eng2> UpdateContext for EngineContextMut<'eng, 'eng2> {
+    type Engine = Engine<'eng>;
 
     fn get<'out, 'slf, O: 'static>(&'slf self, anchor: &Anchor<O, Self::Engine>) -> &'out O
     where
@@ -563,22 +564,23 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
     }
 }
 
-trait GenericAnchor {
+trait GenericAnchor<'e> {
     fn dirty(&mut self, child: &NodeNum);
-    fn poll_updated<'eng>(&mut self, ctx: &mut EngineContextMut<'eng>) -> Poll;
-    fn output<'slf, 'out>(&'slf self, ctx: &mut EngineContext<'out>) -> &'out dyn Any
+    fn poll_updated<'eng>(&mut self, ctx: &mut EngineContextMut<'eng, 'e>) -> Poll ;
+    fn output<'slf, 'out>(&'slf self, ctx: &mut EngineContext<'out, 'e>) -> &'out dyn Any
     where
         'slf: 'out;
     fn debug_info(&self) -> AnchorDebugInfo;
 }
-impl<I: AnchorInner<Engine> + 'static> GenericAnchor for I {
+impl<'e, I: AnchorInner<Engine<'e>>> GenericAnchor<'e> for I {
     fn dirty(&mut self, child: &NodeNum) {
         AnchorInner::dirty(self, child)
     }
-    fn poll_updated<'eng>(&mut self, ctx: &mut EngineContextMut<'eng>) -> Poll {
-        AnchorInner::poll_updated(self, ctx)
+    fn poll_updated<'eng>(&mut self, ctx: &mut EngineContextMut<'eng, 'e>) -> Poll  {
+        // AnchorInner::poll_updated(self, ctx)
+        Poll::Pending
     }
-    fn output<'slf, 'out>(&'slf self, ctx: &mut EngineContext<'out>) -> &'out dyn Any
+    fn output<'slf, 'out>(&'slf self, ctx: &mut EngineContext<'out, 'e>) -> &'out dyn Any
     where
         'slf: 'out,
     {

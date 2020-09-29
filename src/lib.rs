@@ -86,11 +86,11 @@ pub trait AnchorHandle: Sized + Clone {
 /// The core engine trait implemented by each recalculation engine. Allows mounting an `AnchorInner`
 /// into an actual `Anchor`, although this mounting should usually be done by each `AnchorInner`
 /// implementation directly.
-pub trait Engine: 'static {
+pub trait Engine {
     type AnchorHandle: AnchorHandle;
     type DirtyHandle: DirtyHandle;
 
-    fn mount<I: AnchorInner<Self> + 'static>(inner: I) -> Anchor<I::Output, Self>;
+    fn mount<I: AnchorInner<Self>>(inner: I) -> Anchor<I::Output, Self>;
 }
 
 /// Allows a node with non-Anchors inputs to manually mark itself as dirty. Each engine implements its own.
@@ -149,7 +149,7 @@ pub trait UpdateContext {
 /// The engine-agnostic implementation of each type of Anchor. You likely don't need to implement your own
 /// `AnchorInner`; instead use one of the built-in implementations.
 pub trait AnchorInner<E: Engine + ?Sized> {
-    type Output;
+    type Output: 'static;
 
     /// Called by the engine to indicate some input may have changed.
     /// If this `AnchorInner` still cares about `child`'s value, it should re-request
