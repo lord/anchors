@@ -20,7 +20,7 @@ pub struct NodePtrs {
     parent: Cell<Option<*const Node>>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct NodeGuard<'a> {
     inside: &'a Node,
     f: PhantomData<&'a mut &'a ()>,
@@ -55,10 +55,6 @@ impl Graph2 {
     }
 }
 
-impl <'a> Drop for NodeGuard<'a> {
-    fn drop(&mut self) {}
-}
-
 #[test]
 fn test_fails() {
     let graph_a = Graph2::new();
@@ -73,14 +69,15 @@ fn test_fails() {
             observed: Cell::new(false),
             ptrs: NodePtrs::default(),
         });
-        let node_d = graph_b.insert(Node {
+        let node_b2 = graph_b.insert(Node {
             observed: Cell::new(false),
             ptrs: NodePtrs::default(),
         });
-        let node_c = parent(node_d.clone());
-        set_parent(node_b.clone(), node_c.clone());
+        set_parent(node_b, Some(node_b2));
         // set_parent(node_c.unwrap(), Some(node_b));
     }
+
+    println!("{:?}", node_a.observed);
 
     panic!("end");
 }
