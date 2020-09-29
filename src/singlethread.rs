@@ -72,35 +72,36 @@ pub struct Engine<'eng> {
     generation: Generation,
 }
 
-// struct Mounter {
-//     nodes: Rc<RefCell<SlotMap<NodeNum, Node>>>,
-//     refcounter: RefCounter<NodeNum>,
-// }
+struct Mounter<'a> {
+    nodes: Rc<RefCell<SlotMap<NodeNum, Node<'a>>>>,
+    refcounter: RefCounter<NodeNum>,
+}
 
-impl crate::Engine for Engine<'_> {
+impl <'e> crate::Engine for Engine<'e> {
     type AnchorHandle = AnchorHandle;
     type DirtyHandle = DirtyHandle;
 
-    fn mount<I: AnchorInner<Self>>(inner: I) -> Anchor<I::Output, Self> {
+    fn mount<I: AnchorInner<Engine<'e>>>(inner: I) -> Anchor<I::Output, Self> {
         unimplemented!()
         // DEFAULT_MOUNTER.with(|default_mounter| {
-        //     let mut borrow1 = default_mounter.borrow_mut();
-        //     let this = borrow1
-        //         .as_mut()
-        //         .expect("no engine was initialized. did you call `Engine::new()`?");
-        //     let debug_info = inner.debug_info();
-        //     let num = this.nodes.borrow_mut().insert(Node {
-        //         observed: false,
-        //         anchor: Rc::new(RefCell::new(inner)),
-        //         debug_info,
-        //         last_ready: None,
-        //         last_update: None,
-        //     });
-        //     this.refcounter.create(num);
-        //     Anchor::new(AnchorHandle {
-        //         num,
-        //         refcounter: this.refcounter.clone(),
-        //     })
+            // let mut borrow1 = default_mounter.borrow_mut();
+            // let this = borrow1
+            //     .as_mut()
+            //     .expect("no engine was initialized. did you call `Engine::new()`?");
+            // let this: Mounter = unimplemented!();
+            // let debug_info = inner.debug_info();
+            // let num = this.nodes.borrow_mut().insert(Node {
+            //     observed: false,
+            //     anchor: Rc::new(RefCell::new(inner)),
+            //     debug_info,
+            //     last_ready: None,
+            //     last_update: None,
+            // });
+            // this.refcounter.create(num);
+            // Anchor::new(AnchorHandle {
+            //     num,
+            //     refcounter: this.refcounter.clone(),
+            // })
         // })
     }
 }
@@ -108,7 +109,7 @@ impl crate::Engine for Engine<'_> {
 struct Node<'eng> {
     observed: bool,
     debug_info: AnchorDebugInfo,
-    anchor: Rc<RefCell<dyn GenericAnchor<'eng>>>,
+    anchor: Rc<RefCell<dyn GenericAnchor<'eng> + 'eng>>,
     /// tracks the generation when this Node last polled as Updated or Unchanged
     last_ready: Option<Generation>,
     /// tracks the generation when this Node last polled as Updated
@@ -119,6 +120,26 @@ impl <'e> Engine<'e> {
     /// Creates a new Engine with maximum height 256.
     pub fn new() -> Self {
         Self::new_with_max_height(256)
+    }
+
+    pub fn constant<T: 'static>(&self, val: T) -> Anchor<T, Self> {
+        self.mount(crate::Constant::new_raw(val))
+    }
+
+    pub fn mount<I: AnchorInner<Engine<'e>> + 'e>(&self, inner: I) -> Anchor<I::Output, Self> {
+        let debug_info = inner.debug_info();
+        let num = self.nodes.borrow_mut().insert(Node {
+            observed: false,
+            anchor: Rc::new(RefCell::new(inner)),
+            debug_info,
+            last_ready: None,
+            last_update: None,
+        });
+        self.refcounter.create(num);
+        Anchor::new(AnchorHandle {
+            num,
+            refcounter: self.refcounter.clone(),
+        })
     }
 
     /// Creates a new Engine with a custom maximum height.

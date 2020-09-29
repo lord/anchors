@@ -18,6 +18,15 @@ impl<T: 'static> Constant<T> {
             location: Location::caller(),
         })
     }
+
+    #[track_caller]
+    pub fn new_raw(val: T) -> Constant<T> {
+        Self {
+            val,
+            first_poll: true,
+            location: Location::caller(),
+        }
+    }
 }
 
 impl<T: 'static, E: Engine> AnchorInner<E> for Constant<T> {
