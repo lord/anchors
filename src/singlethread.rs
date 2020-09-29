@@ -115,7 +115,7 @@ struct Node<'eng> {
     last_update: Option<Generation>,
 }
 
-impl Engine<'_> {
+impl <'e> Engine<'e> {
     /// Creates a new Engine with maximum height 256.
     pub fn new() -> Self {
         Self::new_with_max_height(256)
@@ -295,7 +295,7 @@ impl Engine<'_> {
     }
 
     /// returns false if calculation is still pending
-    fn recalculate(&mut self, this_node_num: NodeNum) -> bool {
+    fn recalculate<'slf>(&'slf mut self, this_node_num: NodeNum) -> bool {
         let this_anchor = self
             .nodes
             .borrow()
@@ -468,7 +468,7 @@ impl<'eng, 'eng2> OutputContext<'eng> for EngineContext<'eng, 'eng2> {
 }
 
 impl<'eng, 'eng2> UpdateContext for EngineContextMut<'eng, 'eng2> {
-    type Engine = Engine<'eng>;
+    type Engine = Engine<'eng2>;
 
     fn get<'out, 'slf, O: 'static>(&'slf self, anchor: &Anchor<O, Self::Engine>) -> &'out O
     where
@@ -566,7 +566,7 @@ impl<'eng, 'eng2> UpdateContext for EngineContextMut<'eng, 'eng2> {
 
 trait GenericAnchor<'e> {
     fn dirty(&mut self, child: &NodeNum);
-    fn poll_updated<'eng>(&mut self, ctx: &mut EngineContextMut<'eng, 'e>) -> Poll ;
+    fn poll_updated(&mut self, ctx: &mut EngineContextMut<'_, 'e>) -> Poll;
     fn output<'slf, 'out>(&'slf self, ctx: &mut EngineContext<'out, 'e>) -> &'out dyn Any
     where
         'slf: 'out;
@@ -576,9 +576,8 @@ impl<'e, I: AnchorInner<Engine<'e>>> GenericAnchor<'e> for I {
     fn dirty(&mut self, child: &NodeNum) {
         AnchorInner::dirty(self, child)
     }
-    fn poll_updated<'eng>(&mut self, ctx: &mut EngineContextMut<'eng, 'e>) -> Poll  {
-        // AnchorInner::poll_updated(self, ctx)
-        Poll::Pending
+    fn poll_updated(&mut self, ctx: &mut EngineContextMut<'_, 'e>) -> Poll {
+        AnchorInner::poll_updated(self, ctx)
     }
     fn output<'slf, 'out>(&'slf self, ctx: &mut EngineContext<'out, 'e>) -> &'out dyn Any
     where
