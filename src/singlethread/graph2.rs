@@ -12,9 +12,9 @@ pub (super) struct Graph2 {
 pub (super) struct Node {
     pub observed: Cell<bool>,
     pub valid: Cell<bool>,
-    pub count: Cell<bool>,
+    pub necessary_count: Cell<u32>,
     pub debug_info: Cell<AnchorDebugInfo>,
-    pub anchor: Option<Box<dyn GenericAnchor>>,
+    pub anchor: Cell<Option<Box<dyn GenericAnchor>>>,
     pub ptrs: NodePtrs,
 }
 #[derive(Default)]
@@ -59,7 +59,7 @@ impl <'a> NodeGuard<'a> {
         }
     }
 
-    pub fn take_clean_parents<F: FnMut(NodeGuard<'a>)>(
+    pub fn drain_clean_parents<F: FnMut(NodeGuard<'a>)>(
         self,
         mut func: F,
     ) {
