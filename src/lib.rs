@@ -436,4 +436,12 @@ mod test {
         my_unread_updater.set(50);
         assert_eq!(engine.get(&dynamic_name), "Robo");
     }
+
+    #[test]
+    fn test_new() {
+        use crate::{singlethread::Engine, AnchorExt, Var};
+        let mut engine = Engine::new();
+        let my_num = engine.constant(123);
+        assert_eq!(engine.get(&my_num), 123);
+    }
 }
