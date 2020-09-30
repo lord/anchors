@@ -181,8 +181,6 @@ impl Graph2 {
     }
 
     pub (super) fn insert<'a>(&'a self, key: NodeNum, mut anchor: Rc<RefCell<dyn GenericAnchor>>, debug_info: AnchorDebugInfo) -> NodeGuard<'a> {
-        // SAFETY: ensure ptrs struct is empty on insert
-        // TODO this probably is not actually necessary if there's no way to take a Node out of the graph
         let mut node = Node {
             observed: Cell::new(false),
             valid: Cell::new(false),
@@ -196,6 +194,8 @@ impl Graph2 {
             last_update: Cell::new(None),
             anchor,
         };
+        // SAFETY: ensure ptrs struct is empty on insert
+        // TODO this probably is not actually necessary if there's no way to take a Node out of the graph
         node.ptrs = NodePtrs::default();
         let inside = self.nodes.alloc(node);
         self.mapping.borrow_mut().insert(key, inside);
