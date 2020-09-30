@@ -8,10 +8,12 @@ use slotmap::{secondary::SecondaryMap, Key};
 use std::collections::HashMap;
 use std::iter::Iterator;
 
-pub struct Graph2<K: Key> {
+use crate::singlethread::NodeNum;
+
+pub struct Graph2 {
     nodes: Arena<Node>,
-    mapping: RefCell<SecondaryMap<K, *const Node>>,
-    rev_mapping: RefCell<HashMap<*const Node, K>>,
+    mapping: RefCell<SecondaryMap<NodeNum, *const Node>>,
+    rev_mapping: RefCell<HashMap<*const Node, NodeNum>>,
 }
 
 pub struct Node {
@@ -25,6 +27,8 @@ pub struct Node {
     pub necessary_count: Cell<usize>,
 
     pub height: Cell<usize>,
+
+    pub id: Cell<NodeNum>,
 
     // pub debug_info: Cell<AnchorDebugInfo>,
     // pub anchor: Cell<Option<Box<dyn GenericAnchor>>>,
@@ -163,7 +167,7 @@ impl <'a> Drop for RefCellVecIterator<'a> {
     }
 }
 
-impl <K: Key + Copy> Graph2<K> {
+impl Graph2 {
     pub fn new() -> Self {
         Self {
             rev_mapping: RefCell::new(HashMap::new()),
@@ -179,7 +183,7 @@ impl <K: Key + Copy> Graph2<K> {
         NodeGuard {inside: self.nodes.alloc(node), f: PhantomData}
     }
 
-    pub fn get_or_default<'a>(&'a self, key: K) -> NodeGuard<'a> {
+    pub fn get_or_default<'a>(&'a self, key: NodeNum) -> NodeGuard<'a> {
         let mut mapping = self.mapping.borrow_mut();
         if mapping.contains_key(key) {
             NodeGuard {inside: unsafe {&**mapping.get_unchecked(key)}, f: PhantomData}
@@ -190,6 +194,7 @@ impl <K: Key + Copy> Graph2<K> {
                 visited: Cell::new(false),
                 necessary_count: Cell::new(0),
                 height: Cell::new(0),
+                id: Cell::new(key),
                 ptrs: NodePtrs::default(),
             });
             mapping.insert(key, guard.inside as *const Node);
@@ -198,7 +203,7 @@ impl <K: Key + Copy> Graph2<K> {
         }
     }
 
-    pub fn lookup_key<'a>(&'a self, guard: NodeGuard<'a>) -> K {
+    pub fn lookup_key<'a>(&'a self, guard: NodeGuard<'a>) -> NodeNum {
         *self.rev_mapping.borrow().get(&(guard.inside as *const Node)).unwrap()
     }
 }

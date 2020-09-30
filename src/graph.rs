@@ -2,13 +2,15 @@ use slotmap::{secondary::SecondaryMap, Key};
 use std::fmt::Debug;
 use crate::singlethread::graph2::{Graph2, NodeGuard};
 
+use crate::singlethread::NodeNum;
+
 #[derive(Debug, Clone)]
-struct Node<T: Eq + Copy + Debug + Key + Ord> {
+struct Node {
     /// These are the parents of this node that are clean
-    clean_parents: Vec<T>,
+    clean_parents: Vec<NodeNum>,
 
     /// These are the children of this node that are necessary by this node
-    necessary_children: Vec<T>,
+    necessary_children: Vec<NodeNum>,
 
     /// This is the number of nodes that list this node as an necessary child
     necessary_count: usize,
@@ -20,7 +22,7 @@ struct Node<T: Eq + Copy + Debug + Key + Ord> {
     /// Used when setting heights to detect cycles
     visited: bool,
 }
-impl<T: Eq + Copy + Debug + Key + Ord> Default for Node<T> {
+impl Default for Node {
     fn default() -> Self {
         Node {
             height: 0,
@@ -32,20 +34,24 @@ impl<T: Eq + Copy + Debug + Key + Ord> Default for Node<T> {
     }
 }
 
-pub struct MetadataGraph<T: Eq + Copy + Debug + Key + Ord> {
-    graph: Graph2<T>,
+pub struct MetadataGraph {
+    graph: Graph2,
 }
 
-impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
+impl MetadataGraph {
     pub fn new() -> Self {
         Self {
             graph: Graph2::new(),
         }
     }
 
+    pub fn raw_graph(&self) -> &Graph2 {
+        &self.graph
+    }
+
     /// Returns Ok(true) if height was already increasing, Ok(false) if was not already increasing, and Err if there's a cycle.
     /// The error message is the list of node ids in the cycle.
-    pub fn ensure_height_increases(&mut self, child: T, parent: T) -> Result<bool, Vec<T>> {
+    pub fn ensure_height_increases(&mut self, child: NodeNum, parent: NodeNum) -> Result<bool, Vec<NodeNum>> {
         let parent = self.graph.get_or_default(parent);
         let child = self.graph.get_or_default(child);
         if child.height.get() < parent.height.get() {
@@ -57,49 +63,49 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         res.map(|()| false).map_err(|()| vec![])
     }
 
-    pub fn set_edge_clean(&mut self, child: T, parent: T) {
+    pub fn set_edge_clean(&mut self, child: NodeNum, parent: NodeNum) {
         let parent = self.graph.get_or_default(parent);
         let child = self.graph.get_or_default(child);
         child.add_clean_parent(parent);
     }
 
-    pub fn set_edge_necessary(&mut self, child: T, parent: T) {
+    pub fn set_edge_necessary(&mut self, child: NodeNum, parent: NodeNum) {
         let parent = self.graph.get_or_default(parent);
         let child = self.graph.get_or_default(child);
         parent.add_necessary_child(child);
     }
 
-    pub fn set_edge_unnecessary(&mut self, child: T, parent: T) {
+    pub fn set_edge_unnecessary(&mut self, child: NodeNum, parent: NodeNum) {
         let parent = self.graph.get_or_default(parent);
         let child = self.graph.get_or_default(child);
         parent.remove_necessary_child(child);
     }
 
-    pub fn remove(&mut self, node_id: T) {
+    pub fn remove(&mut self, node_id: NodeNum) {
         // TODO implement
     }
 
     #[allow(dead_code)]
     pub fn clean_parents<'a>(
         &'a self,
-        node_id: T,
-    ) -> impl std::iter::Iterator<Item = T> {
+        node_id: NodeNum,
+    ) -> impl std::iter::Iterator<Item = NodeNum> {
         let node = self.graph.get_or_default(node_id);
-        let res: Vec<T> = node.clean_parents().map(|child| self.graph.lookup_key(child)).collect();
+        let res: Vec<_> = node.clean_parents().map(|child| self.graph.lookup_key(child)).collect();
         res.into_iter()
     }
 
     pub fn drain_clean_parents<'a>(
         &'a mut self,
-        node_id: T,
-    ) -> impl std::iter::Iterator<Item=T> {
+        node_id: NodeNum,
+    ) -> impl std::iter::Iterator<Item=NodeNum> {
         let node = self.graph.get_or_default(node_id);
-        let res: Vec<T> = node.drain_clean_parents().map(|child| self.graph.lookup_key(child)).collect();
+        let res: Vec<_> = node.drain_clean_parents().map(|child| self.graph.lookup_key(child)).collect();
         res.into_iter()
     }
 
     #[allow(dead_code)]
-    pub fn necessary_children<'a>(&'a self, node_id: T) -> impl std::iter::Iterator<Item = T> {
+    pub fn necessary_children<'a>(&'a self, node_id: NodeNum) -> impl std::iter::Iterator<Item = NodeNum> {
         let node = self.graph.get_or_default(node_id);
         let mut res = vec![];
         for child in node.necessary_children() {
@@ -108,7 +114,7 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         res.into_iter()
     }
 
-    pub fn drain_necessary_children<'a>(&'a mut self, node_id: T) -> Option<Vec<T>> {
+    pub fn drain_necessary_children<'a>(&'a mut self, node_id: NodeNum) -> Option<Vec<NodeNum>> {
         let node = self.graph.get_or_default(node_id);
         let mut res = vec![];
         for child in node.drain_necessary_children() {
@@ -117,12 +123,12 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
         Some(res)
     }
 
-    pub fn is_necessary(&self, node_id: T) -> bool {
+    pub fn is_necessary(&self, node_id: NodeNum) -> bool {
         let node = self.graph.get_or_default(node_id);
         node.necessary_count.get() > 0
     }
 
-    pub fn height(&self, node_id: T) -> usize {
+    pub fn height(&self, node_id: NodeNum) -> usize {
         let node = self.graph.get_or_default(node_id);
         node.height.get()
     }
@@ -152,21 +158,21 @@ fn set_min_height0<'a>(node: NodeGuard<'a>, min_height: usize) -> Result<(), ()>
 #[cfg(test)]
 mod test {
     use super::*;
-    use slotmap::{DefaultKey, KeyData};
     use std::ops::Deref;
+    use slotmap::KeyData;
 
     fn to_vec<I: std::iter::Iterator>(iter: I) -> Vec<I::Item> {
         iter.collect()
     }
 
-    fn k(num: u64) -> DefaultKey {
+    fn k(num: u64) -> NodeNum {
         KeyData::from_ffi(num).into()
     }
 
     #[test]
     fn set_edge_updates_correctly() {
-        let mut graph = MetadataGraph::<DefaultKey>::new();
-        let empty: Vec<DefaultKey> = vec![];
+        let mut graph = MetadataGraph::new();
+        let empty: Vec<NodeNum> = vec![];
 
         assert_eq!(empty, to_vec(graph.necessary_children(k(1))));
         assert_eq!(empty, to_vec(graph.clean_parents(k(1))));
@@ -217,7 +223,7 @@ mod test {
 
     #[test]
     fn height_calculated_correctly() {
-        let mut graph = MetadataGraph::<DefaultKey>::new();
+        let mut graph = MetadataGraph::new();
 
         assert_eq!(0, graph.height(k(1)));
         assert_eq!(0, graph.height(k(2)));
@@ -248,7 +254,7 @@ mod test {
 
     #[test]
     fn cycles_cause_error() {
-        let mut graph = MetadataGraph::<DefaultKey>::new();
+        let mut graph = MetadataGraph::new();
         graph.ensure_height_increases(k(2), k(3)).unwrap();
         graph.set_edge_clean(k(2), k(3));
         graph
@@ -258,7 +264,7 @@ mod test {
 
     #[test]
     fn non_cycles_wont_cause_errors() {
-        let mut graph = MetadataGraph::<DefaultKey>::new();
+        let mut graph = MetadataGraph::new();
         graph.ensure_height_increases(k(10), k(20)).unwrap();
         graph.set_edge_clean(k(10), k(20));
         graph.ensure_height_increases(k(20), k(30)).unwrap();
