@@ -4,9 +4,11 @@ use std::cell::{Cell, RefCell};
 use super::{GenericAnchor, AnchorDebugInfo, Engine};
 use crate::AnchorInner;
 use std::marker::PhantomData;
+use slotmap::{secondary::SecondaryMap, Key};
 
-pub (super) struct Graph2 {
+pub (super) struct Graph2<K: Key> {
     nodes: Arena<Node>,
+    mapping: RefCell<SecondaryMap<K, *const Node>>,
 }
 
 pub (super) struct Node {
@@ -108,10 +110,11 @@ impl <'a> NodeGuard<'a> {
     }
 }
 
-impl Graph2 {
+impl <K: Key + Copy> Graph2<K> {
     fn new() -> Self {
         Self {
             nodes: Arena::new(),
+            mapping: RefCell::new(SecondaryMap::new()),
         }
     }
 
@@ -120,6 +123,24 @@ impl Graph2 {
         // TODO this probably is not actually necessary if there's no way to take a Node out of the graph
         node.ptrs = NodePtrs::default();
         NodeGuard {inside: self.nodes.alloc(node), f: PhantomData}
+    }
+
+    fn get_mut_or_default<'a>(&'a self, key: K) -> NodeGuard<'a> {
+        let mut mapping = self.mapping.borrow_mut();
+        if mapping.contains_key(key) {
+            NodeGuard {inside: unsafe {&**mapping.get_unchecked(key)}, f: PhantomData}
+        } else {
+            let guard = self.insert(Node {
+                observed: Cell::new(false),
+                valid: Cell::new(false),
+                visited: Cell::new(false),
+                necessary_count: Cell::new(0),
+                height: Cell::new(0),
+                ptrs: NodePtrs::default(),
+            });
+            mapping.insert(key, guard.inside as *const Node);
+            guard
+        }
     }
 }
 
