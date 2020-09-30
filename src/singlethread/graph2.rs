@@ -1,11 +1,12 @@
 use typed_arena::Arena;
 use std::rc::Rc;
-use std::cell::{Cell, RefCell};
+use std::cell::{Cell, RefCell, RefMut};
 use super::{GenericAnchor, AnchorDebugInfo, Engine};
 use crate::AnchorInner;
 use std::marker::PhantomData;
 use slotmap::{secondary::SecondaryMap, Key};
 use std::collections::HashMap;
+use std::iter::Iterator;
 
 pub struct Graph2<K: Key> {
     nodes: Arena<Node>,
@@ -60,16 +61,12 @@ impl <'a> NodeGuard<'a> {
         }
     }
 
-    pub fn clean_parents<F: FnMut(NodeGuard<'a>)>(
-        self,
-        mut func: F,
-    ) {
-        if let Some(parent) = self.inside.ptrs.clean_parent0.get() {
-            func(NodeGuard {inside: unsafe {&*parent}, f: self.f});
-
-            for parent in self.inside.ptrs.clean_parents.borrow_mut().iter() {
-                func(NodeGuard {inside: unsafe {&**parent}, f: self.f});
-            }
+    pub fn clean_parents(self) -> impl Iterator<Item=NodeGuard<'a>> {
+        RefCellVecIterator {
+            inside: self.inside.ptrs.clean_parents.borrow_mut(),
+            next_i: 0,
+            first: self.inside.ptrs.clean_parent0.get(),
+            f: PhantomData,
         }
     }
 
@@ -120,6 +117,27 @@ impl <'a> NodeGuard<'a> {
             child_ref.necessary_count.set(child_ref.necessary_count.get() - 1);
             func(NodeGuard {inside: child_ref, f: self.f});
         }
+    }
+}
+
+struct RefCellVecIterator<'a> {
+    inside: RefMut<'a, Vec<*const Node>>,
+    next_i: usize,
+    first: Option<*const Node>,
+    // hack to make RefCellVecIterator invariant
+    f: PhantomData<&'a mut &'a ()>,
+}
+
+impl <'a> Iterator for RefCellVecIterator<'a> {
+    type Item = NodeGuard<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(first) = self.first.take() {
+            return Some(NodeGuard {inside: unsafe{&*first},  f: self.f});
+        }
+        let next = self.inside.get(self.next_i)?;
+        self.next_i += 1;
+        Some(NodeGuard {inside: unsafe{&**next},  f: self.f})
     }
 }
 

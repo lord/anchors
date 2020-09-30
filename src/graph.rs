@@ -83,11 +83,10 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
     pub fn clean_parents<'a>(
         &'a self,
         node_id: T,
-    ) -> Option<impl std::iter::Iterator<Item = T>> {
+    ) -> impl std::iter::Iterator<Item = T> {
         let node = self.graph.get_or_default(node_id);
-        let mut res = vec![];
-        node.clean_parents(|child| res.push(self.graph.lookup_key(child)));
-        Some(res.into_iter())
+        let res: Vec<T> = node.clean_parents().map(|child| self.graph.lookup_key(child)).collect();
+        res.into_iter()
     }
 
     pub fn drain_clean_parents<'a>(
@@ -101,11 +100,11 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
     }
 
     #[allow(dead_code)]
-    pub fn necessary_children<'a>(&'a self, node_id: T) -> Option<impl std::iter::Iterator<Item = T>> {
+    pub fn necessary_children<'a>(&'a self, node_id: T) -> impl std::iter::Iterator<Item = T> {
         let node = self.graph.get_or_default(node_id);
         let mut res = vec![];
         node.necessary_children(|child| res.push(self.graph.lookup_key(child)));
-        Some(res.into_iter())
+        res.into_iter()
     }
 
     pub fn drain_necessary_children<'a>(&'a mut self, node_id: T) -> Option<Vec<T>> {
@@ -134,11 +133,11 @@ fn set_min_height0<'a>(node: NodeGuard<'a>, min_height: usize) -> Result<(), ()>
     if node.height.get() < min_height {
         node.height.set(min_height);
         let mut did_err = false;
-        node.clean_parents(|parent| {
+        for parent in node.clean_parents() {
             if let Err(mut loop_ids) = set_min_height0(parent, min_height + 1) {
                 did_err = true;
             }
-        });
+        };
         if did_err {
             return Err(())
         }
@@ -153,11 +152,8 @@ mod test {
     use slotmap::{DefaultKey, KeyData};
     use std::ops::Deref;
 
-    fn to_vec<I: std::iter::Iterator>(iter: Option<I>) -> Vec<I::Item> {
-        match iter {
-            None => vec![],
-            Some(iter) => iter.collect(),
-        }
+    fn to_vec<I: std::iter::Iterator>(iter: I) -> Vec<I::Item> {
+        iter.collect()
     }
 
     fn k(num: u64) -> DefaultKey {
