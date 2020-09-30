@@ -64,7 +64,6 @@ slotmap::new_key_type! {
 /// The main execution engine of Singlethread.
 pub struct Engine {
     // TODO store Nodes on heap directly?? maybe try for Rc<RefCell<SlotMap>> now
-    nodes: Rc<RefCell<SlotMap<NodeNum, Node>>>,
     graph: Rc<graph::MetadataGraph>,
     to_recalculate: RefCell<NodeQueue<NodeNum>>,
     dirty_marks: Rc<RefCell<Vec<NodeNum>>>,
@@ -78,7 +77,6 @@ pub struct Engine {
 }
 
 struct Mounter {
-    nodes: Rc<RefCell<SlotMap<NodeNum, Node>>>,
     graph: Rc<graph::MetadataGraph>,
     refcounter: RefCounter<NodeNum>,
 }
@@ -94,19 +92,14 @@ impl crate::Engine for Engine {
                 .as_mut()
                 .expect("no engine was initialized. did you call `Engine::new()`?");
             let debug_info = inner.debug_info();
-            let num = this.nodes.borrow_mut().insert(Node {});
+            let num = this.graph.raw_graph().insert(Rc::new(RefCell::new(inner)), debug_info);
             this.refcounter.create(num);
-            let debug_info = inner.debug_info();
-            this.graph.raw_graph().insert(num, Rc::new(RefCell::new(inner)), debug_info);
             Anchor::new(AnchorHandle {
                 num,
                 refcounter: this.refcounter.clone(),
             })
         })
     }
-}
-
-struct Node {
 }
 
 impl Engine {
@@ -118,16 +111,13 @@ impl Engine {
     /// Creates a new Engine with a custom maximum height.
     pub fn new_with_max_height(max_height: usize) -> Self {
         let refcounter = RefCounter::new();
-        let nodes = Rc::new(RefCell::new(SlotMap::with_key()));
         let graph = Rc::new(graph::MetadataGraph::new());
         let mounter = Mounter {
             refcounter: refcounter.clone(),
-            nodes: nodes.clone(),
             graph: graph.clone(),
         };
         DEFAULT_MOUNTER.with(|v| *v.borrow_mut() = Some(mounter));
         Self {
-            nodes,
             graph,
             to_recalculate: RefCell::new(NodeQueue::new(max_height)),
             dirty_marks: Default::default(),
@@ -240,33 +230,32 @@ impl Engine {
 
     /// Returns a debug string containing the current state of the recomputation graph.
     pub fn debug_state(&self) -> String {
-        let nodes = self.nodes.borrow();
         let mut debug = "".to_string();
-        for (node_id, _) in nodes.iter() {
-            let node = self.graph.raw_graph().get(node_id).unwrap();
-            let necessary = if self.graph.is_necessary(node_id) {
-                "necessary"
-            } else {
-                "   --    "
-            };
-            let observed = if Self::check_observed_raw(node) == ObservedState::Observed {
-                "observed"
-            } else {
-                "   --   "
-            };
-            let state = match self.to_recalculate.borrow_mut().state(node_id) {
-                NodeState::NeedsRecalc => "NeedsRecalc  ",
-                NodeState::PendingRecalc => "PendingRecalc",
-                NodeState::Ready => "Ready        ",
-            };
-            debug += &format!(
-                "{:>80}  {}  {}  {}\n",
-                node.debug_info.get().to_string(),
-                necessary,
-                observed,
-                state
-            );
-        }
+        // for (node_id, _) in nodes.iter() {
+        //     let node = self.graph.raw_graph().get(node_id).unwrap();
+        //     let necessary = if self.graph.is_necessary(node_id) {
+        //         "necessary"
+        //     } else {
+        //         "   --    "
+        //     };
+        //     let observed = if Self::check_observed_raw(node) == ObservedState::Observed {
+        //         "observed"
+        //     } else {
+        //         "   --   "
+        //     };
+        //     let state = match self.to_recalculate.borrow_mut().state(node_id) {
+        //         NodeState::NeedsRecalc => "NeedsRecalc  ",
+        //         NodeState::PendingRecalc => "PendingRecalc",
+        //         NodeState::Ready => "Ready        ",
+        //     };
+        //     debug += &format!(
+        //         "{:>80}  {}  {}  {}\n",
+        //         node.debug_info.get().to_string(),
+        //         necessary,
+        //         observed,
+        //         state
+        //     );
+        // }
         debug
     }
 
@@ -289,10 +278,8 @@ impl Engine {
 
     fn garbage_collect(&mut self) {
         let graph = &mut self.graph;
-        let mut nodes = self.nodes.borrow_mut();
         self.refcounter.drain(|item| {
             graph.remove(item);
-            nodes.remove(item);
         });
     }
 
@@ -322,14 +309,12 @@ impl Engine {
             Poll::Updated => {
                 // make sure all parents are marked as dirty, and observed parents are recalculated
                 self.mark_dirty(this_node_num, true);
-                let mut nodes = self.nodes.borrow_mut();
                 let node = self.graph.raw_graph().get(this_node_num).unwrap();
                 node.last_update.set(Some(self.generation));
                 node.last_ready.set(Some(self.generation));
                 true
             }
             Poll::Unchanged => {
-                let mut nodes = self.nodes.borrow_mut();
                 let node = self.graph.raw_graph().get(this_node_num).unwrap();
                 node.last_ready.set(Some(self.generation));
                 true
@@ -432,7 +417,6 @@ impl<'eng> OutputContext<'eng> for EngineContext<'eng> {
     where
         'eng: 'out,
     {
-        let target_node = &self.engine.nodes.borrow()[anchor.data.num];
         if self.engine.to_recalculate.borrow().state(anchor.data.num) != NodeState::Ready
         {
             panic!("attempted to get node that was not previously requested")
@@ -521,7 +505,6 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
                     self.node_num,
                 );
             }
-            let nodes = self.engine.nodes.borrow();
             match (child.last_update.get(), self_node.last_ready.get()) {
                 (Some(a), Some(b)) if a <= b =>  Poll::Unchanged,
                 _ => Poll::Updated,

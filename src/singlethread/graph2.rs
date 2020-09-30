@@ -4,14 +4,14 @@ use std::cell::{Cell, RefCell, RefMut};
 use super::{GenericAnchor, AnchorDebugInfo, Engine, Generation};
 use crate::AnchorInner;
 use std::marker::PhantomData;
-use slotmap::{secondary::SecondaryMap, Key};
+use slotmap::{SlotMap, Key};
 use std::iter::Iterator;
 
 use crate::singlethread::NodeNum;
 
 pub struct Graph2 {
     nodes: Arena<Node>,
-    mapping: RefCell<SecondaryMap<NodeNum, *const Node>>,
+    mapping: RefCell<SlotMap<NodeNum, *const Node>>,
 }
 
 pub struct Node {
@@ -176,38 +176,38 @@ impl Graph2 {
     pub fn new() -> Self {
         Self {
             nodes: Arena::new(),
-            mapping: RefCell::new(SecondaryMap::new()),
+            mapping: RefCell::new(SlotMap::with_key()),
         }
     }
 
     #[cfg(test)]
-    pub fn insert_testing(&self, key: NodeNum) {
-        self.insert(key, Rc::new(RefCell::new(crate::constant::Constant::new_raw_testing(123))), AnchorDebugInfo {
+    pub fn insert_testing(&self) -> NodeNum {
+        self.insert(Rc::new(RefCell::new(crate::constant::Constant::new_raw_testing(123))), AnchorDebugInfo {
             location: None,
             type_info: "testing dummy anchor",
-        });
+        })
     }
 
-    pub (super) fn insert<'a>(&'a self, key: NodeNum, mut anchor: Rc<RefCell<dyn GenericAnchor>>, debug_info: AnchorDebugInfo) -> NodeGuard<'a> {
-        let mut node = Node {
-            observed: Cell::new(false),
-            valid: Cell::new(false),
-            visited: Cell::new(false),
-            necessary_count: Cell::new(0),
-            height: Cell::new(0),
-            key: Cell::new(key),
-            ptrs: NodePtrs::default(),
-            debug_info: Cell::new(debug_info),
-            last_ready: Cell::new(None),
-            last_update: Cell::new(None),
-            anchor,
-        };
-        // SAFETY: ensure ptrs struct is empty on insert
-        // TODO this probably is not actually necessary if there's no way to take a Node out of the graph
-        node.ptrs = NodePtrs::default();
-        let inside = self.nodes.alloc(node);
-        self.mapping.borrow_mut().insert(key, inside);
-        NodeGuard {inside, f: PhantomData}
+    pub (super) fn insert<'a>(&'a self, mut anchor: Rc<RefCell<dyn GenericAnchor>>, debug_info: AnchorDebugInfo) -> NodeNum {
+        self.mapping.borrow_mut().insert_with_key(|key| {
+            let mut node = Node {
+                observed: Cell::new(false),
+                valid: Cell::new(false),
+                visited: Cell::new(false),
+                necessary_count: Cell::new(0),
+                height: Cell::new(0),
+                key: Cell::new(key),
+                ptrs: NodePtrs::default(),
+                debug_info: Cell::new(debug_info),
+                last_ready: Cell::new(None),
+                last_update: Cell::new(None),
+                anchor,
+            };
+            // SAFETY: ensure ptrs struct is empty on insert
+            // TODO this probably is not actually necessary if there's no way to take a Node out of the graph
+            node.ptrs = NodePtrs::default();
+            self.nodes.alloc(node)
+        })
     }
 
     pub fn get<'a>(&'a self, key: NodeNum) -> Option<NodeGuard<'a>> {

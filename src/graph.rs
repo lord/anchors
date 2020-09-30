@@ -1,4 +1,3 @@
-use slotmap::{secondary::SecondaryMap, Key};
 use std::fmt::Debug;
 use crate::singlethread::graph2::{Graph2, NodeGuard};
 
@@ -171,129 +170,124 @@ mod test {
         iter.collect()
     }
 
-    fn k(num: u64) -> NodeNum {
-        KeyData::from_ffi(num).into()
-    }
-
     #[test]
     fn set_edge_updates_correctly() {
         let mut graph = MetadataGraph::new();
-        graph.raw_graph().insert_testing(k(1));
-        graph.raw_graph().insert_testing(k(2));
+        let a = graph.raw_graph().insert_testing();
+        let b = graph.raw_graph().insert_testing();
         let empty: Vec<NodeNum> = vec![];
 
-        assert_eq!(empty, to_vec(graph.necessary_children(k(1))));
-        assert_eq!(empty, to_vec(graph.clean_parents(k(1))));
-        assert_eq!(empty, to_vec(graph.necessary_children(k(2))));
-        assert_eq!(empty, to_vec(graph.clean_parents(k(2))));
-        assert_eq!(false, graph.is_necessary(k(1)));
-        assert_eq!(false, graph.is_necessary(k(2)));
+        assert_eq!(empty, to_vec(graph.necessary_children(a)));
+        assert_eq!(empty, to_vec(graph.clean_parents(a)));
+        assert_eq!(empty, to_vec(graph.necessary_children(b)));
+        assert_eq!(empty, to_vec(graph.clean_parents(b)));
+        assert_eq!(false, graph.is_necessary(a));
+        assert_eq!(false, graph.is_necessary(b));
 
-        assert_eq!(Ok(false), graph.ensure_height_increases(k(1), k(2)));
-        assert_eq!(Ok(true), graph.ensure_height_increases(k(1), k(2)));
-        graph.set_edge_clean(k(1), k(2));
+        assert_eq!(Ok(false), graph.ensure_height_increases(a, b));
+        assert_eq!(Ok(true), graph.ensure_height_increases(a, b));
+        graph.set_edge_clean(a, b);
 
-        assert_eq!(empty, to_vec(graph.necessary_children(k(1))));
-        assert_eq!(vec![k(2)], to_vec(graph.clean_parents(k(1))));
-        assert_eq!(empty, to_vec(graph.necessary_children(k(2))));
-        assert_eq!(empty, to_vec(graph.clean_parents(k(2))));
-        assert_eq!(false, graph.is_necessary(k(1)));
-        assert_eq!(false, graph.is_necessary(k(2)));
+        assert_eq!(empty, to_vec(graph.necessary_children(a)));
+        assert_eq!(vec![b], to_vec(graph.clean_parents(a)));
+        assert_eq!(empty, to_vec(graph.necessary_children(b)));
+        assert_eq!(empty, to_vec(graph.clean_parents(b)));
+        assert_eq!(false, graph.is_necessary(a));
+        assert_eq!(false, graph.is_necessary(b));
 
-        assert_eq!(Ok(true), graph.ensure_height_increases(k(1), k(2)));
-        graph.set_edge_necessary(k(1), k(2));
+        assert_eq!(Ok(true), graph.ensure_height_increases(a, b));
+        graph.set_edge_necessary(a, b);
 
-        assert_eq!(empty, to_vec(graph.necessary_children(k(1))));
-        assert_eq!(vec![k(2)], to_vec(graph.clean_parents(k(1))));
-        assert_eq!(vec![k(1)], to_vec(graph.necessary_children(k(2))));
-        assert_eq!(empty, to_vec(graph.clean_parents(k(2))));
-        assert_eq!(true, graph.is_necessary(k(1)));
-        assert_eq!(false, graph.is_necessary(k(2)));
+        assert_eq!(empty, to_vec(graph.necessary_children(a)));
+        assert_eq!(vec![b], to_vec(graph.clean_parents(a)));
+        assert_eq!(vec![a], to_vec(graph.necessary_children(b)));
+        assert_eq!(empty, to_vec(graph.clean_parents(b)));
+        assert_eq!(true, graph.is_necessary(a));
+        assert_eq!(false, graph.is_necessary(b));
 
-        graph.drain_clean_parents(k(1));
+        graph.drain_clean_parents(a);
 
-        assert_eq!(empty, to_vec(graph.necessary_children(k(1))));
-        assert_eq!(empty, to_vec(graph.clean_parents(k(1))));
-        assert_eq!(vec![k(1)], to_vec(graph.necessary_children(k(2))));
-        assert_eq!(empty, to_vec(graph.clean_parents(k(2))));
-        assert_eq!(true, graph.is_necessary(k(1)));
-        assert_eq!(false, graph.is_necessary(k(2)));
+        assert_eq!(empty, to_vec(graph.necessary_children(a)));
+        assert_eq!(empty, to_vec(graph.clean_parents(a)));
+        assert_eq!(vec![a], to_vec(graph.necessary_children(b)));
+        assert_eq!(empty, to_vec(graph.clean_parents(b)));
+        assert_eq!(true, graph.is_necessary(a));
+        assert_eq!(false, graph.is_necessary(b));
 
-        graph.drain_necessary_children(k(2));
+        graph.drain_necessary_children(b);
 
-        assert_eq!(empty, to_vec(graph.necessary_children(k(1))));
-        assert_eq!(empty, to_vec(graph.clean_parents(k(1))));
-        assert_eq!(empty, to_vec(graph.necessary_children(k(2))));
-        assert_eq!(empty, to_vec(graph.clean_parents(k(2))));
-        assert_eq!(false, graph.is_necessary(k(1)));
-        assert_eq!(false, graph.is_necessary(k(2)));
+        assert_eq!(empty, to_vec(graph.necessary_children(a)));
+        assert_eq!(empty, to_vec(graph.clean_parents(a)));
+        assert_eq!(empty, to_vec(graph.necessary_children(b)));
+        assert_eq!(empty, to_vec(graph.clean_parents(b)));
+        assert_eq!(false, graph.is_necessary(a));
+        assert_eq!(false, graph.is_necessary(b));
     }
 
     #[test]
     fn height_calculated_correctly() {
         let mut graph = MetadataGraph::new();
-        graph.raw_graph().insert_testing(k(1));
-        graph.raw_graph().insert_testing(k(2));
-        graph.raw_graph().insert_testing(k(3));
+        let a = graph.raw_graph().insert_testing();
+        let b = graph.raw_graph().insert_testing();
+        let c = graph.raw_graph().insert_testing();
 
-        assert_eq!(0, graph.height(k(1)));
-        assert_eq!(0, graph.height(k(2)));
-        assert_eq!(0, graph.height(k(3)));
+        assert_eq!(0, graph.height(a));
+        assert_eq!(0, graph.height(b));
+        assert_eq!(0, graph.height(c));
 
-        assert_eq!(Ok(false), graph.ensure_height_increases(k(2), k(3)));
-        assert_eq!(Ok(true), graph.ensure_height_increases(k(2), k(3)));
-        graph.set_edge_clean(k(2), k(3));
+        assert_eq!(Ok(false), graph.ensure_height_increases(b, c));
+        assert_eq!(Ok(true), graph.ensure_height_increases(b, c));
+        graph.set_edge_clean(b, c);
 
-        assert_eq!(0, graph.height(k(1)));
-        assert_eq!(0, graph.height(k(2)));
-        assert_eq!(1, graph.height(k(3)));
+        assert_eq!(0, graph.height(a));
+        assert_eq!(0, graph.height(b));
+        assert_eq!(1, graph.height(c));
 
-        assert_eq!(Ok(false), graph.ensure_height_increases(k(1), k(2)));
-        assert_eq!(Ok(true), graph.ensure_height_increases(k(1), k(2)));
-        graph.set_edge_clean(k(1), k(2));
+        assert_eq!(Ok(false), graph.ensure_height_increases(a, b));
+        assert_eq!(Ok(true), graph.ensure_height_increases(a, b));
+        graph.set_edge_clean(a, b);
 
-        assert_eq!(0, graph.height(k(1)));
-        assert_eq!(1, graph.height(k(2)));
-        assert_eq!(2, graph.height(k(3)));
+        assert_eq!(0, graph.height(a));
+        assert_eq!(1, graph.height(b));
+        assert_eq!(2, graph.height(c));
 
-        graph.drain_clean_parents(k(1));
+        graph.drain_clean_parents(a);
 
-        assert_eq!(0, graph.height(k(1)));
-        assert_eq!(1, graph.height(k(2)));
-        assert_eq!(2, graph.height(k(3)));
+        assert_eq!(0, graph.height(a));
+        assert_eq!(1, graph.height(b));
+        assert_eq!(2, graph.height(c));
     }
 
     #[test]
     fn cycles_cause_error() {
         let mut graph = MetadataGraph::new();
-        graph.raw_graph().insert_testing(k(1));
-        graph.raw_graph().insert_testing(k(2));
-        graph.raw_graph().insert_testing(k(3));
-        graph.ensure_height_increases(k(2), k(3)).unwrap();
-        graph.set_edge_clean(k(2), k(3));
+        let b = graph.raw_graph().insert_testing();
+        let c = graph.raw_graph().insert_testing();
+        graph.ensure_height_increases(b, c).unwrap();
+        graph.set_edge_clean(b, c);
         graph
-            .ensure_height_increases(k(3), k(2))
+            .ensure_height_increases(c, b)
             .unwrap_err();
     }
 
     #[test]
     fn non_cycles_wont_cause_errors() {
         let mut graph = MetadataGraph::new();
-        graph.raw_graph().insert_testing(k(2));
-        graph.raw_graph().insert_testing(k(10));
-        graph.raw_graph().insert_testing(k(20));
-        graph.raw_graph().insert_testing(k(21));
-        graph.raw_graph().insert_testing(k(30));
+        let a = graph.raw_graph().insert_testing();
+        let b = graph.raw_graph().insert_testing();
+        let c = graph.raw_graph().insert_testing();
+        let d = graph.raw_graph().insert_testing();
+        let e = graph.raw_graph().insert_testing();
 
-        graph.ensure_height_increases(k(10), k(20)).unwrap();
-        graph.set_edge_clean(k(10), k(20));
-        graph.ensure_height_increases(k(20), k(30)).unwrap();
-        graph.set_edge_clean(k(20), k(30));
-        graph.ensure_height_increases(k(10), k(21)).unwrap();
-        graph.set_edge_clean(k(10), k(21));
-        graph.ensure_height_increases(k(21), k(30)).unwrap();
-        graph.set_edge_clean(k(21), k(30));
-        graph.ensure_height_increases(k(2), k(10)).unwrap();
-        graph.set_edge_clean(k(2), k(10));
+        graph.ensure_height_increases(b, c).unwrap();
+        graph.set_edge_clean(b, c);
+        graph.ensure_height_increases(c, e).unwrap();
+        graph.set_edge_clean(c, e);
+        graph.ensure_height_increases(b, d).unwrap();
+        graph.set_edge_clean(b, d);
+        graph.ensure_height_increases(d, e).unwrap();
+        graph.set_edge_clean(d, e);
+        graph.ensure_height_increases(a, b).unwrap();
+        graph.set_edge_clean(a, b);
     }
 }
