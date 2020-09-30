@@ -5,7 +5,6 @@ use super::{GenericAnchor, AnchorDebugInfo, Engine};
 use crate::AnchorInner;
 use std::marker::PhantomData;
 use slotmap::{secondary::SecondaryMap, Key};
-use std::collections::HashMap;
 use std::iter::Iterator;
 
 use crate::singlethread::NodeNum;
@@ -13,7 +12,6 @@ use crate::singlethread::NodeNum;
 pub struct Graph2 {
     nodes: Arena<Node>,
     mapping: RefCell<SecondaryMap<NodeNum, *const Node>>,
-    rev_mapping: RefCell<HashMap<*const Node, NodeNum>>,
 }
 
 pub struct Node {
@@ -28,7 +26,7 @@ pub struct Node {
 
     pub height: Cell<usize>,
 
-    pub id: Cell<NodeNum>,
+    pub key: Cell<NodeNum>,
 
     // pub debug_info: Cell<AnchorDebugInfo>,
     // pub anchor: Cell<Option<Box<dyn GenericAnchor>>>,
@@ -170,7 +168,6 @@ impl <'a> Drop for RefCellVecIterator<'a> {
 impl Graph2 {
     pub fn new() -> Self {
         Self {
-            rev_mapping: RefCell::new(HashMap::new()),
             nodes: Arena::new(),
             mapping: RefCell::new(SecondaryMap::new()),
         }
@@ -194,17 +191,12 @@ impl Graph2 {
                 visited: Cell::new(false),
                 necessary_count: Cell::new(0),
                 height: Cell::new(0),
-                id: Cell::new(key),
+                key: Cell::new(key),
                 ptrs: NodePtrs::default(),
             });
             mapping.insert(key, guard.inside as *const Node);
-            self.rev_mapping.borrow_mut().insert(guard.inside as *const Node, key);
             guard
         }
-    }
-
-    pub fn lookup_key<'a>(&'a self, guard: NodeGuard<'a>) -> NodeNum {
-        *self.rev_mapping.borrow().get(&(guard.inside as *const Node)).unwrap()
     }
 }
 

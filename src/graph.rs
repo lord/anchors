@@ -91,7 +91,7 @@ impl MetadataGraph {
         node_id: NodeNum,
     ) -> impl std::iter::Iterator<Item = NodeNum> {
         let node = self.graph.get_or_default(node_id);
-        let res: Vec<_> = node.clean_parents().map(|child| self.graph.lookup_key(child)).collect();
+        let res: Vec<_> = node.clean_parents().map(|child| child.key.get()).collect();
         res.into_iter()
     }
 
@@ -100,7 +100,7 @@ impl MetadataGraph {
         node_id: NodeNum,
     ) -> impl std::iter::Iterator<Item=NodeNum> {
         let node = self.graph.get_or_default(node_id);
-        let res: Vec<_> = node.drain_clean_parents().map(|child| self.graph.lookup_key(child)).collect();
+        let res: Vec<_> = node.drain_clean_parents().map(|child| child.key.get()).collect();
         res.into_iter()
     }
 
@@ -109,7 +109,7 @@ impl MetadataGraph {
         let node = self.graph.get_or_default(node_id);
         let mut res = vec![];
         for child in node.necessary_children() {
-            res.push(self.graph.lookup_key(child));
+            res.push(child.key.get());
         }
         res.into_iter()
     }
@@ -118,7 +118,7 @@ impl MetadataGraph {
         let node = self.graph.get_or_default(node_id);
         let mut res = vec![];
         for child in node.drain_necessary_children() {
-            res.push(self.graph.lookup_key(child));
+            res.push(child.key.get());
         }
         Some(res)
     }

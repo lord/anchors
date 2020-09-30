@@ -63,7 +63,7 @@ slotmap::new_key_type! {
 pub struct Engine {
     // TODO store Nodes on heap directly?? maybe try for Rc<RefCell<SlotMap>> now
     nodes: Rc<RefCell<SlotMap<NodeNum, Node>>>,
-    graph: graph::MetadataGraph<NodeNum>,
+    graph: graph::MetadataGraph,
     to_recalculate: NodeQueue<NodeNum>,
     dirty_marks: Rc<RefCell<Vec<NodeNum>>>,
     refcounter: RefCounter<NodeNum>,
