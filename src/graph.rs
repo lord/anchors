@@ -3,36 +3,6 @@ use crate::singlethread::graph2::{Graph2, NodeGuard};
 
 use crate::singlethread::NodeNum;
 
-#[derive(Debug, Clone)]
-struct Node {
-    /// These are the parents of this node that are clean
-    clean_parents: Vec<NodeNum>,
-
-    /// These are the children of this node that are necessary by this node
-    necessary_children: Vec<NodeNum>,
-
-    /// This is the number of nodes that list this node as an necessary child
-    necessary_count: usize,
-
-    /// `0` if this node has no children, otherwise `max of children's height + 1`. This number
-    /// can only ever increase, so that we avoid re-updating the whole graph if the height of some
-    /// child element keeps changing.
-    height: usize,
-    /// Used when setting heights to detect cycles
-    visited: bool,
-}
-impl Default for Node {
-    fn default() -> Self {
-        Node {
-            height: 0,
-            visited: false,
-            clean_parents: vec![],
-            necessary_children: vec![],
-            necessary_count: 0,
-        }
-    }
-}
-
 pub struct MetadataGraph {
     graph: Graph2,
 }
