@@ -142,7 +142,7 @@ impl Engine {
     /// often, it's best to mark it as Observed so that Anchors can calculate its
     /// dependencies faster.
     pub fn mark_observed<O: 'static>(&mut self, anchor: &Anchor<O, Engine>) {
-        self.graph.raw_graph().get_or_default(anchor.data.num).observed.set(true);
+        self.graph.raw_graph().get(anchor.data.num).unwrap().observed.set(true);
         if self.to_recalculate.borrow().state(anchor.data.num) != NodeState::Ready {
             self.mark_node_for_recalculation(anchor.data.num);
         }
@@ -152,7 +152,7 @@ impl Engine {
     /// because `anchor` was previously observed, those parents will be unmarked as
     /// necessary.
     pub fn mark_unobserved<O: 'static>(&mut self, anchor: &Anchor<O, Engine>) {
-        let node = self.graph.raw_graph().get_or_default(anchor.data.num);
+        let node = self.graph.raw_graph().get(anchor.data.num).unwrap();
         node.observed.set(false);
         Self::update_necessary_children(node);
     }
@@ -183,7 +183,7 @@ impl Engine {
             // to make sure we don't unnecessarily increment generation number
             self.stabilize0();
         }
-        let target_anchor = self.graph.raw_graph().get_or_default(anchor.data.num).anchor.clone();
+        let target_anchor = self.graph.raw_graph().get(anchor.data.num).unwrap().anchor.clone();
         let borrow = target_anchor.borrow();
         borrow
             .output(&mut EngineContext {
@@ -243,7 +243,7 @@ impl Engine {
         let nodes = self.nodes.borrow();
         let mut debug = "".to_string();
         for (node_id, _) in nodes.iter() {
-            let node = self.graph.raw_graph().get_or_default(node_id);
+            let node = self.graph.raw_graph().get(node_id).unwrap();
             let necessary = if self.graph.is_necessary(node_id) {
                 "necessary"
             } else {
@@ -271,7 +271,7 @@ impl Engine {
     }
 
     pub fn check_observed<T>(&self, anchor: &Anchor<T, Engine>) -> ObservedState {
-        let node = self.graph.raw_graph().get_or_default(anchor.data.num);
+        let node = self.graph.raw_graph().get(anchor.data.num).unwrap();
         Self::check_observed_raw(node)
     }
 
@@ -298,7 +298,7 @@ impl Engine {
 
     /// returns false if calculation is still pending
     fn recalculate(&mut self, this_node_num: NodeNum) -> bool {
-        let this_anchor = self.graph.raw_graph().get_or_default(this_node_num).anchor.clone();
+        let this_anchor = self.graph.raw_graph().get(this_node_num).unwrap().anchor.clone();
         let mut ecx = EngineContextMut {
             engine: self,
             node_num: this_node_num,
@@ -323,14 +323,14 @@ impl Engine {
                 // make sure all parents are marked as dirty, and observed parents are recalculated
                 self.mark_dirty(this_node_num, true);
                 let mut nodes = self.nodes.borrow_mut();
-                let node = self.graph.raw_graph().get_or_default(this_node_num);
+                let node = self.graph.raw_graph().get(this_node_num).unwrap();
                 node.last_update.set(Some(self.generation));
                 node.last_ready.set(Some(self.generation));
                 true
             }
             Poll::Unchanged => {
                 let mut nodes = self.nodes.borrow_mut();
-                let node = self.graph.raw_graph().get_or_default(this_node_num);
+                let node = self.graph.raw_graph().get(this_node_num).unwrap();
                 node.last_ready.set(Some(self.generation));
                 true
             },
@@ -341,7 +341,7 @@ impl Engine {
     // skip_self = false indicates node has not yet been recalculated
     fn mark_dirty(&mut self, node_id: NodeNum, skip_self: bool) {
         let graph = self.graph.raw_graph();
-        let node = graph.get_or_default(node_id);
+        let node = graph.get(node_id).unwrap();
         if skip_self {
             let parents = node.drain_clean_parents();
             for parent in parents {
@@ -437,7 +437,7 @@ impl<'eng> OutputContext<'eng> for EngineContext<'eng> {
         {
             panic!("attempted to get node that was not previously requested")
         }
-        let node = self.engine.graph.raw_graph().get_or_default(anchor.data.num);
+        let node = self.engine.graph.raw_graph().get(anchor.data.num).unwrap();
         let unsafe_borrow = unsafe { node.anchor.as_ptr().as_ref().unwrap() };
         let output: &O = unsafe_borrow
             .output(&mut EngineContext {
@@ -462,7 +462,7 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
             panic!("attempted to get node that was not previously requested")
         }
 
-        let node = self.engine.graph.raw_graph().get_or_default(anchor.data.num);
+        let node = self.engine.graph.raw_graph().get(anchor.data.num).unwrap();
         let unsafe_borrow = unsafe { node.anchor.as_ptr().as_ref().unwrap() };
         let output: &O = unsafe_borrow
             .output(&mut EngineContext {
@@ -479,14 +479,14 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
         anchor: &Anchor<O, Self::Engine>,
         necessary: bool,
     ) -> Poll {
-        let self_node = self.engine.graph.raw_graph().get_or_default(self.node_num);
-        let child = self.engine.graph.raw_graph().get_or_default(anchor.data.num);
+        let self_node = self.engine.graph.raw_graph().get(self.node_num).unwrap();
+        let child = self.engine.graph.raw_graph().get(anchor.data.num).unwrap();
         let height_already_increased = match self.engine.graph.ensure_height_increases(anchor.data.num, self.node_num) {
             Ok(v) => v,
             Err(cycle) => {
                 let mut debug_str = "".to_string();
                 for id in &cycle {
-                    let name = self.engine.graph.raw_graph().get_or_default(*id).debug_info.get().to_string();
+                    let name = self.engine.graph.raw_graph().get(*id).unwrap().debug_info.get().to_string();
                     debug_str.push_str("\n-> ");
                     debug_str.push_str(&name);
                 }
@@ -495,7 +495,7 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
         };
 
         let self_is_necessary =
-            Engine::check_observed_raw(self.engine.graph.raw_graph().get_or_default(self.node_num)) != ObservedState::Unnecessary;
+            Engine::check_observed_raw(self.engine.graph.raw_graph().get(self.node_num).unwrap()) != ObservedState::Unnecessary;
 
         if self.engine.to_recalculate.borrow().state(anchor.data.num) != NodeState::Ready {
             self.pending_on_anchor_get = true;
@@ -531,7 +531,7 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
 
     fn unrequest<'out, O: 'static>(&mut self, anchor: &Anchor<O, Self::Engine>) {
         self.engine.graph.set_edge_unnecessary(anchor.data.num, self.node_num);
-        let node = self.engine.graph.raw_graph().get_or_default(anchor.data.num);
+        let node = self.engine.graph.raw_graph().get(anchor.data.num).unwrap();
         Engine::update_necessary_children(node);
     }
 

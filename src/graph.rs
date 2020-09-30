@@ -52,8 +52,8 @@ impl MetadataGraph {
     /// Returns Ok(true) if height was already increasing, Ok(false) if was not already increasing, and Err if there's a cycle.
     /// The error message is the list of node ids in the cycle.
     pub fn ensure_height_increases(&self, child: NodeNum, parent: NodeNum) -> Result<bool, Vec<NodeNum>> {
-        let parent = self.graph.get_or_default(parent);
-        let child = self.graph.get_or_default(child);
+        let parent = self.graph.get(parent).unwrap();
+        let child = self.graph.get(child).unwrap();
 
         Self::raw_ensure_height_increases(child, parent).map_err(|()| vec![])
     }
@@ -69,20 +69,20 @@ impl MetadataGraph {
     }
 
     pub fn set_edge_clean(&self, child: NodeNum, parent: NodeNum) {
-        let parent = self.graph.get_or_default(parent);
-        let child = self.graph.get_or_default(child);
+        let parent = self.graph.get(parent).unwrap();
+        let child = self.graph.get(child).unwrap();
         child.add_clean_parent(parent);
     }
 
     pub fn set_edge_necessary(&self, child: NodeNum, parent: NodeNum) {
-        let parent = self.graph.get_or_default(parent);
-        let child = self.graph.get_or_default(child);
+        let parent = self.graph.get(parent).unwrap();
+        let child = self.graph.get(child).unwrap();
         parent.add_necessary_child(child);
     }
 
     pub fn set_edge_unnecessary(&self, child: NodeNum, parent: NodeNum) {
-        let parent = self.graph.get_or_default(parent);
-        let child = self.graph.get_or_default(child);
+        let parent = self.graph.get(parent).unwrap();
+        let child = self.graph.get(child).unwrap();
         parent.remove_necessary_child(child);
     }
 
@@ -95,7 +95,7 @@ impl MetadataGraph {
         &'a self,
         node_id: NodeNum,
     ) -> impl std::iter::Iterator<Item = NodeNum> {
-        let node = self.graph.get_or_default(node_id);
+        let node = self.graph.get(node_id).unwrap();
         let res: Vec<_> = node.clean_parents().map(|child| child.key.get()).collect();
         res.into_iter()
     }
@@ -104,14 +104,14 @@ impl MetadataGraph {
         &'a mut self,
         node_id: NodeNum,
     ) -> impl std::iter::Iterator<Item=NodeNum> {
-        let node = self.graph.get_or_default(node_id);
+        let node = self.graph.get(node_id).unwrap();
         let res: Vec<_> = node.drain_clean_parents().map(|child| child.key.get()).collect();
         res.into_iter()
     }
 
     #[allow(dead_code)]
     pub fn necessary_children<'a>(&'a self, node_id: NodeNum) -> impl std::iter::Iterator<Item = NodeNum> {
-        let node = self.graph.get_or_default(node_id);
+        let node = self.graph.get(node_id).unwrap();
         let mut res = vec![];
         for child in node.necessary_children() {
             res.push(child.key.get());
@@ -120,7 +120,7 @@ impl MetadataGraph {
     }
 
     pub fn drain_necessary_children<'a>(&'a mut self, node_id: NodeNum) -> Option<Vec<NodeNum>> {
-        let node = self.graph.get_or_default(node_id);
+        let node = self.graph.get(node_id).unwrap();
         let mut res = vec![];
         for child in node.drain_necessary_children() {
             res.push(child.key.get());
@@ -129,12 +129,12 @@ impl MetadataGraph {
     }
 
     pub fn is_necessary(&self, node_id: NodeNum) -> bool {
-        let node = self.graph.get_or_default(node_id);
+        let node = self.graph.get(node_id).unwrap();
         node.necessary_count.get() > 0
     }
 
     pub fn height(&self, node_id: NodeNum) -> usize {
-        let node = self.graph.get_or_default(node_id);
+        let node = self.graph.get(node_id).unwrap();
         node.height.get()
     }
 }

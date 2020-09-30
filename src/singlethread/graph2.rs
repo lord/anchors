@@ -203,12 +203,11 @@ impl Graph2 {
     }
 
     pub fn get_or_default<'a>(&'a self, key: NodeNum) -> NodeGuard<'a> {
-        let mut mapping = self.mapping.borrow_mut();
-        if mapping.contains_key(key) {
-            NodeGuard {inside: unsafe {&**mapping.get_unchecked(key)}, f: PhantomData}
-        } else {
-            panic!("did not exist");
-        }
+        unimplemented!()
+    }
+
+    pub fn get<'a>(&'a self, key: NodeNum) -> Option<NodeGuard<'a>> {
+        self.mapping.borrow().get(key).map(|ptr| NodeGuard {inside: unsafe {&**ptr}, f: PhantomData})
     }
 }
 
