@@ -202,10 +202,6 @@ impl Graph2 {
         NodeGuard {inside, f: PhantomData}
     }
 
-    pub fn get_or_default<'a>(&'a self, key: NodeNum) -> NodeGuard<'a> {
-        unimplemented!()
-    }
-
     pub fn get<'a>(&'a self, key: NodeNum) -> Option<NodeGuard<'a>> {
         self.mapping.borrow().get(key).map(|ptr| NodeGuard {inside: unsafe {&**ptr}, f: PhantomData})
     }
