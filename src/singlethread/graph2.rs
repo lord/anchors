@@ -12,15 +12,25 @@ pub (super) struct Graph2 {
 pub (super) struct Node {
     pub observed: Cell<bool>,
     pub valid: Cell<bool>,
-    pub necessary_count: Cell<u32>,
-    pub debug_info: Cell<AnchorDebugInfo>,
-    pub anchor: Cell<Option<Box<dyn GenericAnchor>>>,
+
+    /// bool used during height incrementing to check for loops
+    pub visited: Cell<bool>,
+
+    /// number of nodes that list this node as a necessary child
+    pub necessary_count: Cell<usize>,
+
+    pub height: Cell<usize>,
+
+    // pub debug_info: Cell<AnchorDebugInfo>,
+    // pub anchor: Cell<Option<Box<dyn GenericAnchor>>>,
     pub ptrs: NodePtrs,
 }
 #[derive(Default)]
 pub struct NodePtrs {
     clean_parent0: Cell<Option<*const Node>>,
     clean_parents: RefCell<Vec<*const Node>>,
+    /// sorted in pointer order
+    necessary_children: RefCell<Vec<*const Node>>,
 }
 
 #[derive(Clone, Copy)]
@@ -69,6 +79,31 @@ impl <'a> NodeGuard<'a> {
             for parent in self.inside.ptrs.clean_parents.borrow_mut().drain(..) {
                 func(NodeGuard {inside: unsafe {&*parent}, f: self.f});
             }
+        }
+    }
+
+    pub fn add_necessary_child(self, child: NodeGuard<'a>) {
+        let mut necessary_children = self.inside.ptrs.necessary_children.borrow_mut();
+        if let Err(i) = necessary_children.binary_search(&(child.inside as *const Node)) {
+            necessary_children.insert(i, child.inside as *const Node);
+            child.inside.necessary_count.set(child.inside.necessary_count.get() + 1)
+        }
+    }
+
+    pub fn remove_necessary_child(self, child: NodeGuard<'a>) {
+        let mut necessary_children = self.inside.ptrs.necessary_children.borrow_mut();
+        if let Ok(i) = necessary_children.binary_search(&(child.inside as *const Node)) {
+            necessary_children.remove(i);
+            child.inside.necessary_count.set(child.inside.necessary_count.get() - 1)
+        }
+    }
+
+    pub fn drain_necessary_children<F: FnMut(NodeGuard<'a>)>(
+        self,
+        mut func: F,
+    ) {
+        for parent in self.inside.ptrs.necessary_children.borrow_mut().drain(..) {
+            func(NodeGuard {inside: unsafe {&*parent}, f: self.f});
         }
     }
 }

@@ -6,7 +6,7 @@
 //! Air, likely somewhat more if single node has a significant number of parents or children. Hopefully
 //! this will significantly improve over the coming months.
 
-mod graph2;
+pub mod graph2;
 
 use crate::nodequeue::{NodeQueue, NodeState};
 use crate::refcounter::RefCounter;
