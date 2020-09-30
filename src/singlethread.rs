@@ -95,8 +95,6 @@ impl crate::Engine for Engine {
             let debug_info = inner.debug_info();
             let num = this.nodes.borrow_mut().insert(Node {
                 anchor: Rc::new(RefCell::new(inner)),
-                last_ready: None,
-                last_update: None,
             });
             this.refcounter.create(num);
             Anchor::new(AnchorHandle {
@@ -109,10 +107,6 @@ impl crate::Engine for Engine {
 
 struct Node {
     anchor: Rc<RefCell<dyn GenericAnchor>>,
-    /// tracks the generation when this Node last polled as Updated or Unchanged
-    last_ready: Option<Generation>,
-    /// tracks the generation when this Node last polled as Updated
-    last_update: Option<Generation>,
 }
 
 impl Engine {
@@ -333,15 +327,15 @@ impl Engine {
                 // make sure all parents are marked as dirty, and observed parents are recalculated
                 self.mark_dirty(this_node_num, true);
                 let mut nodes = self.nodes.borrow_mut();
-                let node = nodes.get_mut(this_node_num).unwrap();
-                node.last_update = Some(self.generation);
-                node.last_ready = Some(self.generation);
+                let node = self.graph.raw_graph().get_or_default(this_node_num);
+                node.last_update.set(Some(self.generation));
+                node.last_ready.set(Some(self.generation));
                 true
             }
             Poll::Unchanged => {
                 let mut nodes = self.nodes.borrow_mut();
-                let node = nodes.get_mut(this_node_num).unwrap();
-                node.last_ready = Some(self.generation);
+                let node = self.graph.raw_graph().get_or_default(this_node_num);
+                node.last_ready.set(Some(self.generation));
                 true
             },
         }
@@ -501,6 +495,8 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
         anchor: &Anchor<O, Self::Engine>,
         necessary: bool,
     ) -> Poll {
+        let self_node = self.engine.graph.raw_graph().get_or_default(self.node_num);
+        let child = self.engine.graph.raw_graph().get_or_default(anchor.data.num);
         let height_already_increased = match self.engine.graph.ensure_height_increases(anchor.data.num, self.node_num) {
             Ok(v) => v,
             Err(cycle) => {
@@ -542,10 +538,9 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
                 );
             }
             let nodes = self.engine.nodes.borrow();
-            if nodes.get(anchor.data.num).unwrap().last_update > nodes.get(self.node_num).unwrap().last_ready {
-                Poll::Updated
-            } else {
-                Poll::Unchanged
+            match (child.last_update.get(), self_node.last_ready.get()) {
+                (Some(a), Some(b)) if a <= b =>  Poll::Unchanged,
+                _ => Poll::Updated,
             }
         }
     }

@@ -51,7 +51,7 @@ impl MetadataGraph {
 
     /// Returns Ok(true) if height was already increasing, Ok(false) if was not already increasing, and Err if there's a cycle.
     /// The error message is the list of node ids in the cycle.
-    pub fn ensure_height_increases(&mut self, child: NodeNum, parent: NodeNum) -> Result<bool, Vec<NodeNum>> {
+    pub fn ensure_height_increases(&self, child: NodeNum, parent: NodeNum) -> Result<bool, Vec<NodeNum>> {
         let parent = self.graph.get_or_default(parent);
         let child = self.graph.get_or_default(child);
 
@@ -68,13 +68,13 @@ impl MetadataGraph {
         res.map(|()| false)
     }
 
-    pub fn set_edge_clean(&mut self, child: NodeNum, parent: NodeNum) {
+    pub fn set_edge_clean(&self, child: NodeNum, parent: NodeNum) {
         let parent = self.graph.get_or_default(parent);
         let child = self.graph.get_or_default(child);
         child.add_clean_parent(parent);
     }
 
-    pub fn set_edge_necessary(&mut self, child: NodeNum, parent: NodeNum) {
+    pub fn set_edge_necessary(&self, child: NodeNum, parent: NodeNum) {
         let parent = self.graph.get_or_default(parent);
         let child = self.graph.get_or_default(child);
         parent.add_necessary_child(child);

@@ -1,7 +1,7 @@
 use typed_arena::Arena;
 use std::rc::Rc;
 use std::cell::{Cell, RefCell, RefMut};
-use super::{GenericAnchor, AnchorDebugInfo, Engine};
+use super::{GenericAnchor, AnchorDebugInfo, Engine, Generation};
 use crate::AnchorInner;
 use std::marker::PhantomData;
 use slotmap::{secondary::SecondaryMap, Key};
@@ -29,6 +29,11 @@ pub struct Node {
     pub key: Cell<NodeNum>,
 
     pub (super) debug_info: Cell<AnchorDebugInfo>,
+
+    /// tracks the generation when this Node last polled as Updated or Unchanged
+    pub (super) last_ready: Cell<Option<Generation>>,
+    /// tracks the generation when this Node last polled as Updated
+    pub (super) last_update: Cell<Option<Generation>>,
 
     // pub debug_info: Cell<AnchorDebugInfo>,
     // pub anchor: Cell<Option<Box<dyn GenericAnchor>>>,
@@ -198,7 +203,9 @@ impl Graph2 {
                 debug_info: Cell::new(AnchorDebugInfo {
                     type_info: "TODO implement actually inserting stuff into graph",
                     location: None,
-                })
+                }),
+                last_ready: Cell::new(None),
+                last_update: Cell::new(None),
             });
             mapping.insert(key, guard.inside as *const Node);
             guard
