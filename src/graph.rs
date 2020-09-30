@@ -1,6 +1,6 @@
 use slotmap::{secondary::SecondaryMap, Key};
 use std::fmt::Debug;
-use crate::singlethread::graph2::{Graph2};
+use crate::singlethread::graph2::{Graph2, NodeGuard};
 
 #[derive(Debug, Clone)]
 struct Node<T: Eq + Copy + Debug + Key + Ord> {
@@ -47,50 +47,34 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
 
     /// Returns Ok(true) if height was already increasing, Ok(false) if was not already increasing, and Err if there's a cycle.
     /// The error message is the list of node ids in the cycle.
-    pub fn ensure_height_increases(&mut self, from: T, to: T) -> Result<bool, Vec<T>> {
-        if self.height(from) < self.height(to) {
+    pub fn ensure_height_increases(&mut self, child: T, parent: T) -> Result<bool, Vec<T>> {
+        let parent = self.graph.get_mut_or_default(parent);
+        let child = self.graph.get_mut_or_default(child);
+        if child.height.get() < parent.height.get() {
             return Ok(true);
         }
-        self.get_mut_or_default(from).visited = true;
-        let res = self.set_min_height(to, self.height(from) + 1);
-        self.get_mut_or_default(from).visited = false;
-        res.map(|()| false)
+        child.visited.set(true);
+        let res = set_min_height0(parent, child.height.get() + 1);
+        child.visited.set(false);
+        res.map(|()| false).map_err(|()| vec![])
     }
 
     pub fn set_edge_clean(&mut self, child: T, parent: T) {
-        let node = self.get_mut_or_default(child);
-        if let Err(i) = node.clean_parents.binary_search(&parent) {
-            node.clean_parents.insert(i, parent);
-        }
+        let parent = self.graph.get_mut_or_default(parent);
+        let child = self.graph.get_mut_or_default(child);
+        child.add_clean_parent(parent);
     }
 
     pub fn set_edge_necessary(&mut self, child: T, parent: T) {
-        let node = self.get_mut_or_default(parent);
-        if let Err(i) = node.necessary_children.binary_search(&child) {
-            node.necessary_children.insert(i, child);
-            {
-                let node = self.get_mut_or_default(child);
-                node.necessary_count += 1;
-            }
-        }
+        let parent = self.graph.get_mut_or_default(parent);
+        let child = self.graph.get_mut_or_default(child);
+        parent.add_necessary_child(child);
     }
 
     pub fn set_edge_unnecessary(&mut self, child: T, parent: T) {
-        let node = self.get_mut_or_default(parent);
-        if let Ok(i) = node.necessary_children.binary_search(&child) {
-            node.necessary_children.remove(i);
-            {
-                let node = self.get_mut_or_default(child);
-                node.necessary_count -= 1;
-            }
-        }
-    }
-
-    fn get_mut_or_default(&mut self, id: T) -> &mut Node<T> {
-        if !self.nodes.contains_key(id) {
-            self.nodes.insert(id, Default::default());
-        }
-        self.nodes.get_mut(id).unwrap()
+        let parent = self.graph.get_mut_or_default(parent);
+        let child = self.graph.get_mut_or_default(child);
+        parent.remove_necessary_child(child);
     }
 
     pub fn remove(&mut self, node_id: T) {
@@ -158,30 +142,27 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
     pub fn height(&self, node_id: T) -> usize {
         self.nodes.get(node_id).map(|node| node.height).unwrap_or(0)
     }
+}
 
-    /// Increases height of this node to `min_height`, updating its parents as appropriate. If
-    /// the node's height is already at `min_height` or above, this will do nothing. If a loop
-    /// is detected, returns a vector of the nodes IDs that form a loop; the caller should
-    /// consider the graph to be subsequently invalid and either create a fresh one or panic.
-    // TODO this still has a bug when reporting loops where it may report more items than just what's available
-    pub fn set_min_height(&mut self, node_id: T, min_height: usize) -> Result<(), Vec<T>> {
-        let node = self.get_mut_or_default(node_id);
-        if node.visited {
-            return Err(vec![node_id]);
-        }
-        node.visited = true;
-        if node.height < min_height {
-            node.height = min_height;
-            for child in node.clean_parents.clone().iter() {
-                if let Err(mut loop_ids) = self.set_min_height(*child, min_height + 1) {
-                    loop_ids.push(node_id);
-                    return Err(loop_ids);
-                }
-            }
-        }
-        self.get_mut_or_default(node_id).visited = false;
-        Ok(())
+fn set_min_height0<'a>(node: NodeGuard<'a>, min_height: usize) -> Result<(), ()> {
+    if node.visited.get() {
+        return Err(());
     }
+    node.visited.set(true);
+    if node.height.get() < min_height {
+        node.height.set(min_height);
+        let mut did_err = false;
+        node.clean_parents(|parent| {
+            if let Err(mut loop_ids) = set_min_height0(parent, min_height + 1) {
+                did_err = true;
+            }
+        });
+        if did_err {
+            return Err(())
+        }
+    }
+    node.visited.set(false);
+    Ok(())
 }
 
 #[cfg(test)]
@@ -282,18 +263,6 @@ mod test {
         assert_eq!(0, graph.height(k(1)));
         assert_eq!(1, graph.height(k(2)));
         assert_eq!(2, graph.height(k(3)));
-
-        graph.set_min_height(k(1), 10).unwrap();
-
-        assert_eq!(10, graph.height(k(1)));
-        assert_eq!(1, graph.height(k(2)));
-        assert_eq!(2, graph.height(k(3)));
-
-        graph.set_min_height(k(2), 5).unwrap();
-
-        assert_eq!(10, graph.height(k(1)));
-        assert_eq!(5, graph.height(k(2)));
-        assert_eq!(6, graph.height(k(3)));
     }
 
     #[test]
