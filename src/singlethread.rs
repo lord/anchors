@@ -11,9 +11,10 @@ use crate::refcounter::RefCounter;
 use crate::{graph, Anchor, AnchorInner, OutputContext, Poll, UpdateContext};
 use slotmap::SlotMap;
 use std::any::Any;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::panic::Location;
 use std::rc::Rc;
+use typed_arena::Arena;
 
 use std::num::NonZeroU64;
 
@@ -64,12 +65,17 @@ pub struct Engine<'eng> {
     to_recalculate: NodeQueue<NodeNum>,
     dirty_marks: Rc<RefCell<Vec<NodeNum>>>,
     refcounter: RefCounter<NodeNum>,
+    arena: Arena<Node2<'eng>>,
 
     // used internally by mark_dirty. we persist it so we can allocate less
     queue: Vec<NodeNum>,
 
     // tracks the current stabilization generation; incremented on every stabilize
     generation: Generation,
+}
+
+struct Node2<'eng> {
+    foo: Cell<Option<&'eng Node2<'eng>>>,
 }
 
 #[derive(Clone)]
@@ -157,6 +163,7 @@ impl <'e> Engine<'e> {
         // };
         // DEFAULT_MOUNTER.with(|v| *v.borrow_mut() = Some(mounter));
         Self {
+            arena: Arena::new(),
             nodes,
             graph: graph::MetadataGraph::new(),
             to_recalculate: NodeQueue::new(max_height),
@@ -165,6 +172,11 @@ impl <'e> Engine<'e> {
             queue: vec![],
             generation: Generation::new(),
         }
+    }
+
+    pub fn blah(&'e self) {
+        let mynode = self.arena.alloc(Node2 {foo: Cell::new(None)});
+        mynode.foo.set(Some(mynode));
     }
 
     /// Marks an Anchor as observed. All observed nodes will always be brought up-to-date
@@ -633,4 +645,31 @@ impl AnchorDebugInfo {
             None => format!("{}", self.type_info),
         }
     }
+}
+
+struct Foo<'a> {
+    arena: &'a Arena<Node2<'a>>,
+    // once we get rid of nodes here, it compiles. very promising
+    // nodes: Rc<RefCell<SlotMap<NodeNum, Node<'a>>>>,
+}
+
+fn foo() {
+    let arena: Arena<Node2<'_>> = Arena::new();
+    let mut foo = Foo {
+        arena: &arena,
+        // nodes: Rc::new(RefCell::new(SlotMap::with_key())),
+    };
+    foo2(&foo);
+    foo3(&mut foo);
+}
+
+fn foo3<'a>(foo: &'a mut Foo<'a>) {
+}
+
+fn foo2<'a>(foo2: &Foo<'a>) {
+    let a = foo2.arena.alloc(Node2 { foo: Cell::new(None) });
+    let b = foo2.arena.alloc(Node2 { foo: Cell::new(None) });
+
+    a.foo.set(Some(b));
+    b.foo.set(Some(a));
 }

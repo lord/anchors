@@ -442,6 +442,7 @@ mod test {
         use crate::{singlethread::Engine, AnchorExt, Var};
         let mut engine = Engine::new();
         let my_num = engine.constant(123);
-        assert_eq!(engine.get(&my_num), 123);
+        // engine.blah();
+        // assert_eq!(engine.get(&my_num), 123);
     }
 }
