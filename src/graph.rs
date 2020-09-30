@@ -54,13 +54,18 @@ impl MetadataGraph {
     pub fn ensure_height_increases(&mut self, child: NodeNum, parent: NodeNum) -> Result<bool, Vec<NodeNum>> {
         let parent = self.graph.get_or_default(parent);
         let child = self.graph.get_or_default(child);
+
+        Self::raw_ensure_height_increases(child, parent).map_err(|()| vec![])
+    }
+
+    pub fn raw_ensure_height_increases<'a>(child: NodeGuard<'a>, parent: NodeGuard<'a>) -> Result<bool, ()> {
         if child.height.get() < parent.height.get() {
             return Ok(true);
         }
         child.visited.set(true);
         let res = set_min_height0(parent, child.height.get() + 1);
         child.visited.set(false);
-        res.map(|()| false).map_err(|()| vec![])
+        res.map(|()| false)
     }
 
     pub fn set_edge_clean(&mut self, child: NodeNum, parent: NodeNum) {
