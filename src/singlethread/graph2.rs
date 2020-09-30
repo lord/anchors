@@ -28,6 +28,8 @@ pub struct Node {
 
     pub key: Cell<NodeNum>,
 
+    pub (super) debug_info: Cell<AnchorDebugInfo>,
+
     // pub debug_info: Cell<AnchorDebugInfo>,
     // pub anchor: Cell<Option<Box<dyn GenericAnchor>>>,
     pub ptrs: NodePtrs,
@@ -193,6 +195,10 @@ impl Graph2 {
                 height: Cell::new(0),
                 key: Cell::new(key),
                 ptrs: NodePtrs::default(),
+                debug_info: Cell::new(AnchorDebugInfo {
+                    type_info: "TODO implement actually inserting stuff into graph",
+                    location: None,
+                })
             });
             mapping.insert(key, guard.inside as *const Node);
             guard

@@ -95,7 +95,6 @@ impl crate::Engine for Engine {
             let debug_info = inner.debug_info();
             let num = this.nodes.borrow_mut().insert(Node {
                 anchor: Rc::new(RefCell::new(inner)),
-                debug_info,
                 last_ready: None,
                 last_update: None,
             });
@@ -109,7 +108,6 @@ impl crate::Engine for Engine {
 }
 
 struct Node {
-    debug_info: AnchorDebugInfo,
     anchor: Rc<RefCell<dyn GenericAnchor>>,
     /// tracks the generation when this Node last polled as Updated or Unchanged
     last_ready: Option<Generation>,
@@ -248,13 +246,14 @@ impl Engine {
     pub fn debug_state(&self) -> String {
         let nodes = self.nodes.borrow();
         let mut debug = "".to_string();
-        for (node_id, node) in nodes.iter() {
+        for (node_id, _) in nodes.iter() {
+            let node = self.graph.raw_graph().get_or_default(node_id);
             let necessary = if self.graph.is_necessary(node_id) {
                 "necessary"
             } else {
                 "   --    "
             };
-            let observed = if Self::check_observed_raw(self.graph.raw_graph().get_or_default(node_id)) == ObservedState::Observed {
+            let observed = if Self::check_observed_raw(node) == ObservedState::Observed {
                 "observed"
             } else {
                 "   --   "
@@ -266,7 +265,7 @@ impl Engine {
             };
             debug += &format!(
                 "{:>80}  {}  {}  {}\n",
-                node.debug_info.to_string(),
+                node.debug_info.get().to_string(),
                 necessary,
                 observed,
                 state
@@ -507,13 +506,7 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
             Err(cycle) => {
                 let mut debug_str = "".to_string();
                 for id in &cycle {
-                    let name = self
-                        .engine
-                        .nodes
-                        .borrow()
-                        .get(*id)
-                        .map(|node| node.debug_info.to_string())
-                        .unwrap_or("(unknown node)".to_string());
+                    let name = self.engine.graph.raw_graph().get_or_default(*id).debug_info.get().to_string();
                     debug_str.push_str("\n-> ");
                     debug_str.push_str(&name);
                 }
@@ -600,7 +593,7 @@ impl<I: AnchorInner<Engine> + 'static> GenericAnchor for I {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 struct AnchorDebugInfo {
     location: Option<(&'static str, &'static Location<'static>)>,
     type_info: &'static str,
