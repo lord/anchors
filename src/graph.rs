@@ -102,14 +102,18 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
     pub fn necessary_children<'a>(&'a self, node_id: T) -> impl std::iter::Iterator<Item = T> {
         let node = self.graph.get_or_default(node_id);
         let mut res = vec![];
-        node.necessary_children(|child| res.push(self.graph.lookup_key(child)));
+        for child in node.necessary_children() {
+            res.push(self.graph.lookup_key(child));
+        }
         res.into_iter()
     }
 
     pub fn drain_necessary_children<'a>(&'a mut self, node_id: T) -> Option<Vec<T>> {
         let node = self.graph.get_or_default(node_id);
         let mut res = vec![];
-        node.drain_necessary_children(|child| res.push(self.graph.lookup_key(child)));
+        for child in node.drain_necessary_children() {
+            res.push(self.graph.lookup_key(child));
+        }
         Some(res)
     }
 

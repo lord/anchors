@@ -97,23 +97,28 @@ impl <'a> NodeGuard<'a> {
         }
     }
 
-    pub fn necessary_children<F: FnMut(NodeGuard<'a>)>(
-        self,
-        mut func: F,
-    ) {
-        for parent in self.inside.ptrs.necessary_children.borrow_mut().iter() {
-            func(NodeGuard {inside: unsafe {&**parent}, f: self.f});
+    pub fn necessary_children(self) -> impl Iterator<Item=NodeGuard<'a>> {
+        RefCellVecIterator {
+            inside: self.inside.ptrs.necessary_children.borrow_mut(),
+            next_i: 0,
+            first: None,
+            f: PhantomData,
+            empty_on_drop: false,
         }
     }
 
-    pub fn drain_necessary_children<F: FnMut(NodeGuard<'a>)>(
-        self,
-        mut func: F,
-    ) {
-        for child in self.inside.ptrs.necessary_children.borrow_mut().drain(..) {
-            let child_ref = unsafe {&*child};
-            child_ref.necessary_count.set(child_ref.necessary_count.get() - 1);
-            func(NodeGuard {inside: child_ref, f: self.f});
+    pub fn drain_necessary_children(self) -> impl Iterator<Item=NodeGuard<'a>> {
+        let necessary_children = self.inside.ptrs.necessary_children.borrow_mut();
+        for child in &*necessary_children {
+            let count = &unsafe {&**child}.necessary_count;
+            count.set(count.get() - 1);
+        }
+        RefCellVecIterator {
+            inside: necessary_children,
+            next_i: 0,
+            first: None,
+            f: PhantomData,
+            empty_on_drop: true,
         }
     }
 }
