@@ -92,11 +92,10 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
     pub fn drain_clean_parents<'a>(
         &'a mut self,
         node_id: T,
-    ) -> Option<impl std::iter::Iterator<Item=T> + 'a> {
+    ) -> impl std::iter::Iterator<Item=T> {
         let node = self.graph.get_or_default(node_id);
-        let mut res = vec![];
-        node.drain_clean_parents(|child| res.push(self.graph.lookup_key(child)));
-        Some(res.into_iter())
+        let res: Vec<T> = node.drain_clean_parents().map(|child| self.graph.lookup_key(child)).collect();
+        res.into_iter()
     }
 
     #[allow(dead_code)]

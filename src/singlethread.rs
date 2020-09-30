@@ -347,19 +347,18 @@ impl Engine {
     // skip_self = false indicates node has not yet been recalculated
     fn mark_dirty(&mut self, node_id: NodeNum, skip_self: bool) {
         if skip_self {
-            if let Some(parents) = self.graph.drain_clean_parents(node_id) {
-                self.queue.reserve(parents.size_hint().0);
-                for parent in parents {
-                    // TODO still calling dirty twice on observed relationships
-                    self.nodes
-                        .borrow()
-                        .get(parent)
-                        .unwrap()
-                        .anchor
-                        .borrow_mut()
-                        .dirty(&node_id);
-                    self.queue.push(parent);
-                }
+            let parents = self.graph.drain_clean_parents(node_id);
+            self.queue.reserve(parents.size_hint().0);
+            for parent in parents {
+                // TODO still calling dirty twice on observed relationships
+                self.nodes
+                    .borrow()
+                    .get(parent)
+                    .unwrap()
+                    .anchor
+                    .borrow_mut()
+                    .dirty(&node_id);
+                self.queue.push(parent);
             }
         } else {
             self.queue.push(node_id);
@@ -370,18 +369,17 @@ impl Engine {
                 self.mark_node_for_recalculation(next);
             } else if self.to_recalculate.state(next) == NodeState::Ready {
                 self.to_recalculate.needs_recalc(next);
-                if let Some(parents) = self.graph.drain_clean_parents(next) {
-                    self.queue.reserve(parents.size_hint().0);
-                    for parent in parents {
-                        self.nodes
-                            .borrow()
-                            .get(parent)
-                            .unwrap()
-                            .anchor
-                            .borrow_mut()
-                            .dirty(&next);
-                        self.queue.push(parent);
-                    }
+                let parents = self.graph.drain_clean_parents(next);
+                self.queue.reserve(parents.size_hint().0);
+                for parent in parents {
+                    self.nodes
+                        .borrow()
+                        .get(parent)
+                        .unwrap()
+                        .anchor
+                        .borrow_mut()
+                        .dirty(&next);
+                    self.queue.push(parent);
                 }
             };
         }

@@ -67,19 +67,17 @@ impl <'a> NodeGuard<'a> {
             next_i: 0,
             first: self.inside.ptrs.clean_parent0.get(),
             f: PhantomData,
+            empty_on_drop: false,
         }
     }
 
-    pub fn drain_clean_parents<F: FnMut(NodeGuard<'a>)>(
-        self,
-        mut func: F,
-    ) {
-        if let Some(parent) = self.inside.ptrs.clean_parent0.take() {
-            func(NodeGuard {inside: unsafe {&*parent}, f: self.f});
-
-            for parent in self.inside.ptrs.clean_parents.borrow_mut().drain(..) {
-                func(NodeGuard {inside: unsafe {&*parent}, f: self.f});
-            }
+    pub fn drain_clean_parents(self) -> impl Iterator<Item=NodeGuard<'a>> {
+        RefCellVecIterator {
+            inside: self.inside.ptrs.clean_parents.borrow_mut(),
+            next_i: 0,
+            first: self.inside.ptrs.clean_parent0.take(),
+            f: PhantomData,
+            empty_on_drop: true,
         }
     }
 
@@ -126,6 +124,7 @@ struct RefCellVecIterator<'a> {
     first: Option<*const Node>,
     // hack to make RefCellVecIterator invariant
     f: PhantomData<&'a mut &'a ()>,
+    empty_on_drop: bool,
 }
 
 impl <'a> Iterator for RefCellVecIterator<'a> {
@@ -138,6 +137,24 @@ impl <'a> Iterator for RefCellVecIterator<'a> {
         let next = self.inside.get(self.next_i)?;
         self.next_i += 1;
         Some(NodeGuard {inside: unsafe{&**next},  f: self.f})
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let mut remaining = self.inside.len() - self.next_i;
+
+        if self.first.is_some() {
+            remaining += 1;
+        }
+
+        (remaining, Some(remaining))
+    }
+}
+
+impl <'a> Drop for RefCellVecIterator<'a> {
+    fn drop(&mut self) {
+        if self.empty_on_drop {
+            self.inside.clear()
+        }
     }
 }
 
