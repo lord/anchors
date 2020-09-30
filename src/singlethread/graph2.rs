@@ -35,8 +35,8 @@ pub struct Node {
     /// tracks the generation when this Node last polled as Updated
     pub (super) last_update: Cell<Option<Generation>>,
 
-    // pub debug_info: Cell<AnchorDebugInfo>,
-    // pub anchor: Cell<Option<Box<dyn GenericAnchor>>>,
+    pub (super) anchor: Rc<RefCell<dyn GenericAnchor>>,
+
     pub ptrs: NodePtrs,
 }
 #[derive(Default)]
@@ -180,11 +180,26 @@ impl Graph2 {
         }
     }
 
-    pub fn insert<'a>(&'a self, mut node: Node) -> NodeGuard<'a> {
+    pub (super) fn insert<'a>(&'a self, key: NodeNum, mut anchor: Rc<RefCell<dyn GenericAnchor>>, debug_info: AnchorDebugInfo) -> NodeGuard<'a> {
         // SAFETY: ensure ptrs struct is empty on insert
         // TODO this probably is not actually necessary if there's no way to take a Node out of the graph
+        let mut node = Node {
+            observed: Cell::new(false),
+            valid: Cell::new(false),
+            visited: Cell::new(false),
+            necessary_count: Cell::new(0),
+            height: Cell::new(0),
+            key: Cell::new(key),
+            ptrs: NodePtrs::default(),
+            debug_info: Cell::new(debug_info),
+            last_ready: Cell::new(None),
+            last_update: Cell::new(None),
+            anchor,
+        };
         node.ptrs = NodePtrs::default();
-        NodeGuard {inside: self.nodes.alloc(node), f: PhantomData}
+        let inside = self.nodes.alloc(node);
+        self.mapping.borrow_mut().insert(key, inside);
+        NodeGuard {inside, f: PhantomData}
     }
 
     pub fn get_or_default<'a>(&'a self, key: NodeNum) -> NodeGuard<'a> {
@@ -192,23 +207,7 @@ impl Graph2 {
         if mapping.contains_key(key) {
             NodeGuard {inside: unsafe {&**mapping.get_unchecked(key)}, f: PhantomData}
         } else {
-            let guard = self.insert(Node {
-                observed: Cell::new(false),
-                valid: Cell::new(false),
-                visited: Cell::new(false),
-                necessary_count: Cell::new(0),
-                height: Cell::new(0),
-                key: Cell::new(key),
-                ptrs: NodePtrs::default(),
-                debug_info: Cell::new(AnchorDebugInfo {
-                    type_info: "TODO implement actually inserting stuff into graph",
-                    location: None,
-                }),
-                last_ready: Cell::new(None),
-                last_update: Cell::new(None),
-            });
-            mapping.insert(key, guard.inside as *const Node);
-            guard
+            panic!("did not exist");
         }
     }
 }

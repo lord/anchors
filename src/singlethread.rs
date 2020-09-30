@@ -94,10 +94,10 @@ impl crate::Engine for Engine {
                 .as_mut()
                 .expect("no engine was initialized. did you call `Engine::new()`?");
             let debug_info = inner.debug_info();
-            let num = this.nodes.borrow_mut().insert(Node {
-                anchor: Rc::new(RefCell::new(inner)),
-            });
+            let num = this.nodes.borrow_mut().insert(Node {});
             this.refcounter.create(num);
+            let debug_info = inner.debug_info();
+            this.graph.raw_graph().insert(num, Rc::new(RefCell::new(inner)), debug_info);
             Anchor::new(AnchorHandle {
                 num,
                 refcounter: this.refcounter.clone(),
@@ -107,7 +107,6 @@ impl crate::Engine for Engine {
 }
 
 struct Node {
-    anchor: Rc<RefCell<dyn GenericAnchor>>,
 }
 
 impl Engine {
@@ -184,7 +183,7 @@ impl Engine {
             // to make sure we don't unnecessarily increment generation number
             self.stabilize0();
         }
-        let target_anchor = &self.nodes.borrow()[anchor.data.num].anchor.clone();
+        let target_anchor = self.graph.raw_graph().get_or_default(anchor.data.num).anchor.clone();
         let borrow = target_anchor.borrow();
         borrow
             .output(&mut EngineContext {
@@ -299,13 +298,7 @@ impl Engine {
 
     /// returns false if calculation is still pending
     fn recalculate(&mut self, this_node_num: NodeNum) -> bool {
-        let this_anchor = self
-            .nodes
-            .borrow()
-            .get(this_node_num)
-            .unwrap()
-            .anchor
-            .clone();
+        let this_anchor = self.graph.raw_graph().get_or_default(this_node_num).anchor.clone();
         let mut ecx = EngineContextMut {
             engine: self,
             node_num: this_node_num,
@@ -353,13 +346,7 @@ impl Engine {
             let parents = node.drain_clean_parents();
             for parent in parents {
                 // TODO still calling dirty twice on observed relationships
-                self.nodes
-                    .borrow()
-                    .get(parent.key.get())
-                    .unwrap()
-                    .anchor
-                    .borrow_mut()
-                    .dirty(&node_id);
+                parent.anchor.borrow_mut().dirty(&node_id);
                 self.mark_dirty0(parent);
             }
         } else {
@@ -375,13 +362,7 @@ impl Engine {
             self.to_recalculate.borrow_mut().needs_recalc(id);
             let parents = next.drain_clean_parents();
             for parent in parents {
-                self.nodes
-                    .borrow()
-                    .get(parent.key.get())
-                    .unwrap()
-                    .anchor
-                    .borrow_mut()
-                    .dirty(&id);
+                parent.anchor.borrow_mut().dirty(&id);
                 self.mark_dirty0(parent);
             }
         }
@@ -456,8 +437,8 @@ impl<'eng> OutputContext<'eng> for EngineContext<'eng> {
         {
             panic!("attempted to get node that was not previously requested")
         }
-        // TODO try to wrap all of this in a safe interface?
-        let unsafe_borrow = unsafe { target_node.anchor.as_ptr().as_ref().unwrap() };
+        let node = self.engine.graph.raw_graph().get_or_default(anchor.data.num);
+        let unsafe_borrow = unsafe { node.anchor.as_ptr().as_ref().unwrap() };
         let output: &O = unsafe_borrow
             .output(&mut EngineContext {
                 engine: self.engine,
@@ -476,13 +457,13 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
     where
         'slf: 'out,
     {
-        let target_node = &self.engine.nodes.borrow()[anchor.data.num];
         if self.engine.to_recalculate.borrow().state(anchor.data.num) != NodeState::Ready
         {
             panic!("attempted to get node that was not previously requested")
         }
 
-        let unsafe_borrow = unsafe { target_node.anchor.as_ptr().as_ref().unwrap() };
+        let node = self.engine.graph.raw_graph().get_or_default(anchor.data.num);
+        let unsafe_borrow = unsafe { node.anchor.as_ptr().as_ref().unwrap() };
         let output: &O = unsafe_borrow
             .output(&mut EngineContext {
                 engine: self.engine,
