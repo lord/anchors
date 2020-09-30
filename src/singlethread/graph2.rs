@@ -5,10 +5,12 @@ use super::{GenericAnchor, AnchorDebugInfo, Engine};
 use crate::AnchorInner;
 use std::marker::PhantomData;
 use slotmap::{secondary::SecondaryMap, Key};
+use std::collections::HashMap;
 
 pub struct Graph2<K: Key> {
     nodes: Arena<Node>,
     mapping: RefCell<SecondaryMap<K, *const Node>>,
+    rev_mapping: RefCell<HashMap<*const Node, K>>,
 }
 
 pub struct Node {
@@ -100,12 +102,23 @@ impl <'a> NodeGuard<'a> {
         }
     }
 
+    pub fn necessary_children<F: FnMut(NodeGuard<'a>)>(
+        self,
+        mut func: F,
+    ) {
+        for parent in self.inside.ptrs.necessary_children.borrow_mut().iter() {
+            func(NodeGuard {inside: unsafe {&**parent}, f: self.f});
+        }
+    }
+
     pub fn drain_necessary_children<F: FnMut(NodeGuard<'a>)>(
         self,
         mut func: F,
     ) {
-        for parent in self.inside.ptrs.necessary_children.borrow_mut().drain(..) {
-            func(NodeGuard {inside: unsafe {&*parent}, f: self.f});
+        for child in self.inside.ptrs.necessary_children.borrow_mut().drain(..) {
+            let child_ref = unsafe {&*child};
+            child_ref.necessary_count.set(child_ref.necessary_count.get() - 1);
+            func(NodeGuard {inside: child_ref, f: self.f});
         }
     }
 }
@@ -113,6 +126,7 @@ impl <'a> NodeGuard<'a> {
 impl <K: Key + Copy> Graph2<K> {
     pub fn new() -> Self {
         Self {
+            rev_mapping: RefCell::new(HashMap::new()),
             nodes: Arena::new(),
             mapping: RefCell::new(SecondaryMap::new()),
         }
@@ -125,7 +139,7 @@ impl <K: Key + Copy> Graph2<K> {
         NodeGuard {inside: self.nodes.alloc(node), f: PhantomData}
     }
 
-    pub fn get_mut_or_default<'a>(&'a self, key: K) -> NodeGuard<'a> {
+    pub fn get_or_default<'a>(&'a self, key: K) -> NodeGuard<'a> {
         let mut mapping = self.mapping.borrow_mut();
         if mapping.contains_key(key) {
             NodeGuard {inside: unsafe {&**mapping.get_unchecked(key)}, f: PhantomData}
@@ -139,8 +153,13 @@ impl <K: Key + Copy> Graph2<K> {
                 ptrs: NodePtrs::default(),
             });
             mapping.insert(key, guard.inside as *const Node);
+            self.rev_mapping.borrow_mut().insert(guard.inside as *const Node, key);
             guard
         }
+    }
+
+    pub fn lookup_key<'a>(&'a self, guard: NodeGuard<'a>) -> K {
+        *self.rev_mapping.borrow().get(&(guard.inside as *const Node)).unwrap()
     }
 }
 

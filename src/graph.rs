@@ -33,14 +33,12 @@ impl<T: Eq + Copy + Debug + Key + Ord> Default for Node<T> {
 }
 
 pub struct MetadataGraph<T: Eq + Copy + Debug + Key + Ord> {
-    nodes: SecondaryMap<T, Node<T>>,
     graph: Graph2<T>,
 }
 
 impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
     pub fn new() -> Self {
         Self {
-            nodes: SecondaryMap::new(),
             graph: Graph2::new(),
         }
     }
@@ -48,8 +46,8 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
     /// Returns Ok(true) if height was already increasing, Ok(false) if was not already increasing, and Err if there's a cycle.
     /// The error message is the list of node ids in the cycle.
     pub fn ensure_height_increases(&mut self, child: T, parent: T) -> Result<bool, Vec<T>> {
-        let parent = self.graph.get_mut_or_default(parent);
-        let child = self.graph.get_mut_or_default(child);
+        let parent = self.graph.get_or_default(parent);
+        let child = self.graph.get_or_default(child);
         if child.height.get() < parent.height.get() {
             return Ok(true);
         }
@@ -60,87 +58,71 @@ impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
     }
 
     pub fn set_edge_clean(&mut self, child: T, parent: T) {
-        let parent = self.graph.get_mut_or_default(parent);
-        let child = self.graph.get_mut_or_default(child);
+        let parent = self.graph.get_or_default(parent);
+        let child = self.graph.get_or_default(child);
         child.add_clean_parent(parent);
     }
 
     pub fn set_edge_necessary(&mut self, child: T, parent: T) {
-        let parent = self.graph.get_mut_or_default(parent);
-        let child = self.graph.get_mut_or_default(child);
+        let parent = self.graph.get_or_default(parent);
+        let child = self.graph.get_or_default(child);
         parent.add_necessary_child(child);
     }
 
     pub fn set_edge_unnecessary(&mut self, child: T, parent: T) {
-        let parent = self.graph.get_mut_or_default(parent);
-        let child = self.graph.get_mut_or_default(child);
+        let parent = self.graph.get_or_default(parent);
+        let child = self.graph.get_or_default(child);
         parent.remove_necessary_child(child);
     }
 
     pub fn remove(&mut self, node_id: T) {
-        self.drain_necessary_children(node_id);
-        self.nodes.remove(node_id);
+        // TODO implement
     }
 
     #[allow(dead_code)]
     pub fn clean_parents<'a>(
         &'a self,
         node_id: T,
-    ) -> Option<impl std::iter::Iterator<Item = &'a T>> {
-        let node = match self.nodes.get(node_id) {
-            Some(v) => v,
-            None => return None,
-        };
-        Some(
-            node.clean_parents.iter()
-        )
+    ) -> Option<impl std::iter::Iterator<Item = T>> {
+        let node = self.graph.get_or_default(node_id);
+        let mut res = vec![];
+        node.clean_parents(|child| res.push(self.graph.lookup_key(child)));
+        Some(res.into_iter())
     }
 
     pub fn drain_clean_parents<'a>(
         &'a mut self,
         node_id: T,
-    ) -> Option<impl std::iter::Iterator<Item = T> + 'a> {
-        let node = match self.nodes.get_mut(node_id) {
-            Some(v) => v,
-            None => return None,
-        };
-        Some(node.clean_parents.drain(..))
+    ) -> Option<impl std::iter::Iterator<Item=T> + 'a> {
+        let node = self.graph.get_or_default(node_id);
+        let mut res = vec![];
+        node.drain_clean_parents(|child| res.push(self.graph.lookup_key(child)));
+        Some(res.into_iter())
     }
 
     #[allow(dead_code)]
-    pub fn necessary_children<'a>(&'a self, node_id: T) -> Option<impl std::iter::Iterator<Item = &'a T>> {
-        let node = match self.nodes.get(node_id) {
-            Some(v) => v,
-            None => return None,
-        };
-        Some(node.necessary_children.iter())
+    pub fn necessary_children<'a>(&'a self, node_id: T) -> Option<impl std::iter::Iterator<Item = T>> {
+        let node = self.graph.get_or_default(node_id);
+        let mut res = vec![];
+        node.necessary_children(|child| res.push(self.graph.lookup_key(child)));
+        Some(res.into_iter())
     }
 
     pub fn drain_necessary_children<'a>(&'a mut self, node_id: T) -> Option<Vec<T>> {
-        let node = match self.nodes.get_mut(node_id) {
-            Some(v) => v,
-            None => return None,
-        };
-        let necessary_children = std::mem::replace(&mut node.necessary_children, vec![]);
-        for child in &necessary_children {
-            if let Some(child_node) = self.nodes.get_mut(*child) {
-                child_node.necessary_count -= 1;
-            }
-        }
-        Some(necessary_children)
+        let node = self.graph.get_or_default(node_id);
+        let mut res = vec![];
+        node.drain_necessary_children(|child| res.push(self.graph.lookup_key(child)));
+        Some(res)
     }
 
     pub fn is_necessary(&self, node_id: T) -> bool {
-        let node = match self.nodes.get(node_id) {
-            Some(v) => v,
-            None => return false,
-        };
-
-        node.necessary_count > 0
+        let node = self.graph.get_or_default(node_id);
+        node.necessary_count.get() > 0
     }
 
     pub fn height(&self, node_id: T) -> usize {
-        self.nodes.get(node_id).map(|node| node.height).unwrap_or(0)
+        let node = self.graph.get_or_default(node_id);
+        node.height.get()
     }
 }
 
@@ -171,10 +153,10 @@ mod test {
     use slotmap::{DefaultKey, KeyData};
     use std::ops::Deref;
 
-    fn to_vec<I: std::iter::Iterator>(iter: Option<I>) -> Vec<<I::Item as Deref>::Target> where I::Item: Deref, <I::Item as Deref>::Target : Sized + Copy {
+    fn to_vec<I: std::iter::Iterator>(iter: Option<I>) -> Vec<I::Item> {
         match iter {
             None => vec![],
-            Some(iter) => iter.map(|v| *v).collect(),
+            Some(iter) => iter.collect(),
         }
     }
 
@@ -270,10 +252,9 @@ mod test {
         let mut graph = MetadataGraph::<DefaultKey>::new();
         graph.ensure_height_increases(k(2), k(3)).unwrap();
         graph.set_edge_clean(k(2), k(3));
-        let loop_ids = graph
+        graph
             .ensure_height_increases(k(3), k(2))
             .unwrap_err();
-        assert!(&loop_ids == &[k(2), k(3)] || &loop_ids == &[k(3), k(2)]);
     }
 
     #[test]
