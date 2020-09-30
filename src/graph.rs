@@ -165,6 +165,7 @@ mod test {
     use super::*;
     use std::ops::Deref;
     use slotmap::KeyData;
+    use crate::constant::Constant;
 
     fn to_vec<I: std::iter::Iterator>(iter: I) -> Vec<I::Item> {
         iter.collect()
@@ -177,6 +178,8 @@ mod test {
     #[test]
     fn set_edge_updates_correctly() {
         let mut graph = MetadataGraph::new();
+        graph.raw_graph().insert_testing(k(1));
+        graph.raw_graph().insert_testing(k(2));
         let empty: Vec<NodeNum> = vec![];
 
         assert_eq!(empty, to_vec(graph.necessary_children(k(1))));
@@ -229,6 +232,9 @@ mod test {
     #[test]
     fn height_calculated_correctly() {
         let mut graph = MetadataGraph::new();
+        graph.raw_graph().insert_testing(k(1));
+        graph.raw_graph().insert_testing(k(2));
+        graph.raw_graph().insert_testing(k(3));
 
         assert_eq!(0, graph.height(k(1)));
         assert_eq!(0, graph.height(k(2)));
@@ -260,6 +266,9 @@ mod test {
     #[test]
     fn cycles_cause_error() {
         let mut graph = MetadataGraph::new();
+        graph.raw_graph().insert_testing(k(1));
+        graph.raw_graph().insert_testing(k(2));
+        graph.raw_graph().insert_testing(k(3));
         graph.ensure_height_increases(k(2), k(3)).unwrap();
         graph.set_edge_clean(k(2), k(3));
         graph
@@ -270,6 +279,12 @@ mod test {
     #[test]
     fn non_cycles_wont_cause_errors() {
         let mut graph = MetadataGraph::new();
+        graph.raw_graph().insert_testing(k(2));
+        graph.raw_graph().insert_testing(k(10));
+        graph.raw_graph().insert_testing(k(20));
+        graph.raw_graph().insert_testing(k(21));
+        graph.raw_graph().insert_testing(k(30));
+
         graph.ensure_height_increases(k(10), k(20)).unwrap();
         graph.set_edge_clean(k(10), k(20));
         graph.ensure_height_increases(k(20), k(30)).unwrap();

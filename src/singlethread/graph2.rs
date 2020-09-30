@@ -180,6 +180,14 @@ impl Graph2 {
         }
     }
 
+    #[cfg(test)]
+    pub fn insert_testing(&self, key: NodeNum) {
+        self.insert(key, Rc::new(RefCell::new(crate::constant::Constant::new_raw_testing(123))), AnchorDebugInfo {
+            location: None,
+            type_info: "testing dummy anchor",
+        });
+    }
+
     pub (super) fn insert<'a>(&'a self, key: NodeNum, mut anchor: Rc<RefCell<dyn GenericAnchor>>, debug_info: AnchorDebugInfo) -> NodeGuard<'a> {
         let mut node = Node {
             observed: Cell::new(false),
