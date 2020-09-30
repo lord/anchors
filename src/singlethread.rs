@@ -65,7 +65,7 @@ slotmap::new_key_type! {
 pub struct Engine {
     // TODO store Nodes on heap directly?? maybe try for Rc<RefCell<SlotMap>> now
     nodes: Rc<RefCell<SlotMap<NodeNum, Node>>>,
-    graph: graph::MetadataGraph,
+    graph: Rc<graph::MetadataGraph>,
     to_recalculate: RefCell<NodeQueue<NodeNum>>,
     dirty_marks: Rc<RefCell<Vec<NodeNum>>>,
     refcounter: RefCounter<NodeNum>,
@@ -79,6 +79,7 @@ pub struct Engine {
 
 struct Mounter {
     nodes: Rc<RefCell<SlotMap<NodeNum, Node>>>,
+    graph: Rc<graph::MetadataGraph>,
     refcounter: RefCounter<NodeNum>,
 }
 
@@ -119,14 +120,16 @@ impl Engine {
     pub fn new_with_max_height(max_height: usize) -> Self {
         let refcounter = RefCounter::new();
         let nodes = Rc::new(RefCell::new(SlotMap::with_key()));
+        let graph = Rc::new(graph::MetadataGraph::new());
         let mounter = Mounter {
             refcounter: refcounter.clone(),
             nodes: nodes.clone(),
+            graph: graph.clone(),
         };
         DEFAULT_MOUNTER.with(|v| *v.borrow_mut() = Some(mounter));
         Self {
             nodes,
-            graph: graph::MetadataGraph::new(),
+            graph,
             to_recalculate: RefCell::new(NodeQueue::new(max_height)),
             dirty_marks: Default::default(),
             refcounter,

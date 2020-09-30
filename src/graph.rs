@@ -80,13 +80,13 @@ impl MetadataGraph {
         parent.add_necessary_child(child);
     }
 
-    pub fn set_edge_unnecessary(&mut self, child: NodeNum, parent: NodeNum) {
+    pub fn set_edge_unnecessary(&self, child: NodeNum, parent: NodeNum) {
         let parent = self.graph.get_or_default(parent);
         let child = self.graph.get_or_default(child);
         parent.remove_necessary_child(child);
     }
 
-    pub fn remove(&mut self, node_id: NodeNum) {
+    pub fn remove(&self, node_id: NodeNum) {
         // TODO implement
     }
 
