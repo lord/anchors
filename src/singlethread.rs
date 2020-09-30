@@ -94,7 +94,6 @@ impl crate::Engine for Engine {
                 .expect("no engine was initialized. did you call `Engine::new()`?");
             let debug_info = inner.debug_info();
             let num = this.nodes.borrow_mut().insert(Node {
-                observed: false,
                 anchor: Rc::new(RefCell::new(inner)),
                 debug_info,
                 last_ready: None,
@@ -110,7 +109,6 @@ impl crate::Engine for Engine {
 }
 
 struct Node {
-    observed: bool,
     debug_info: AnchorDebugInfo,
     anchor: Rc<RefCell<dyn GenericAnchor>>,
     /// tracks the generation when this Node last polled as Updated or Unchanged
@@ -150,11 +148,7 @@ impl Engine {
     /// often, it's best to mark it as Observed so that Anchors can calculate its
     /// dependencies faster.
     pub fn mark_observed<O: 'static>(&mut self, anchor: &Anchor<O, Engine>) {
-        self.nodes
-            .borrow_mut()
-            .get_mut(anchor.data.num)
-            .unwrap()
-            .observed = true;
+        self.graph.raw_graph().get_or_default(anchor.data.num).observed.set(true);
         if self.to_recalculate.borrow().state(anchor.data.num) != NodeState::Ready {
             self.mark_node_for_recalculation(anchor.data.num);
         }
@@ -164,16 +158,12 @@ impl Engine {
     /// because `anchor` was previously observed, those parents will be unmarked as
     /// necessary.
     pub fn mark_unobserved<O: 'static>(&mut self, anchor: &Anchor<O, Engine>) {
-        self.nodes
-            .borrow_mut()
-            .get_mut(anchor.data.num)
-            .unwrap()
-            .observed = false;
+        self.graph.raw_graph().get_or_default(anchor.data.num).observed.set(false);
         self.update_necessary_children(anchor.data.num);
     }
 
     fn update_necessary_children(&mut self, id: NodeNum) {
-        if self.check_observed(id) != ObservedState::Unnecessary {
+        if Self::check_observed_raw(self.graph.raw_graph().get_or_default(id)) != ObservedState::Unnecessary {
             // we have another parent still observed, so skip this
             return;
         }
@@ -265,7 +255,7 @@ impl Engine {
             } else {
                 "   --    "
             };
-            let observed = if node.observed {
+            let observed = if Self::check_observed_raw(self.graph.raw_graph().get_or_default(node_id)) == ObservedState::Observed {
                 "observed"
             } else {
                 "   --   "
@@ -286,12 +276,17 @@ impl Engine {
         debug
     }
 
+    pub fn check_observed<T>(&self, anchor: &Anchor<T, Engine>) -> ObservedState {
+        let node = self.graph.raw_graph().get_or_default(anchor.data.num);
+        Self::check_observed_raw(node)
+    }
+
     /// Returns whether an Anchor is Observed, Necessary, or Unnecessary.
-    pub fn check_observed(&self, id: NodeNum) -> ObservedState {
-        if self.nodes.borrow().get(id).as_ref().unwrap().observed {
+    pub fn check_observed_raw<'a>(node: NodeGuard<'a>) -> ObservedState {
+        if node.observed.get() {
             return ObservedState::Observed;
         }
-        if self.graph.is_necessary(id) {
+        if node.necessary_count.get() > 0 {
             ObservedState::Necessary
         } else {
             ObservedState::Unnecessary
@@ -379,7 +374,7 @@ impl Engine {
 
     fn mark_dirty0<'a>(&self, next: NodeGuard<'a>) {
         let id = next.key.get();
-        if self.check_observed(id) != ObservedState::Unnecessary {
+        if Self::check_observed_raw(next) != ObservedState::Unnecessary {
             self.mark_node_for_recalculation(id);
         } else if self.to_recalculate.borrow_mut().state(id) == NodeState::Ready {
             self.to_recalculate.borrow_mut().needs_recalc(id);
@@ -528,7 +523,7 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
         };
 
         let self_is_necessary =
-            self.engine.check_observed(self.node_num) != ObservedState::Unnecessary;
+            Engine::check_observed_raw(self.engine.graph.raw_graph().get_or_default(self.node_num)) != ObservedState::Unnecessary;
 
         if self.engine.to_recalculate.borrow().state(anchor.data.num) != NodeState::Ready {
             self.pending_on_anchor_get = true;

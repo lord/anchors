@@ -305,76 +305,76 @@ mod test {
 
         assert_eq!(
             ObservedState::Unnecessary,
-            engine.check_observed(v1.data.token())
+            engine.check_observed(&v1)
         );
         assert_eq!(
             ObservedState::Observed,
-            engine.check_observed(a.data.token())
+            engine.check_observed(&a)
         );
         assert_eq!(
             ObservedState::Unnecessary,
-            engine.check_observed(b.data.token())
+            engine.check_observed(&b)
         );
         assert_eq!(
             ObservedState::Observed,
-            engine.check_observed(c.data.token())
+            engine.check_observed(&c)
         );
 
         engine.stabilize();
 
         assert_eq!(
             ObservedState::Necessary,
-            engine.check_observed(v1.data.token())
+            engine.check_observed(&v1)
         );
         assert_eq!(
             ObservedState::Observed,
-            engine.check_observed(a.data.token())
+            engine.check_observed(&a)
         );
         assert_eq!(
             ObservedState::Necessary,
-            engine.check_observed(b.data.token())
+            engine.check_observed(&b)
         );
         assert_eq!(
             ObservedState::Observed,
-            engine.check_observed(c.data.token())
+            engine.check_observed(&c)
         );
 
         engine.mark_unobserved(&c);
 
         assert_eq!(
             ObservedState::Necessary,
-            engine.check_observed(v1.data.token())
+            engine.check_observed(&v1)
         );
         assert_eq!(
             ObservedState::Observed,
-            engine.check_observed(a.data.token())
+            engine.check_observed(&a)
         );
         assert_eq!(
             ObservedState::Unnecessary,
-            engine.check_observed(b.data.token())
+            engine.check_observed(&b)
         );
         assert_eq!(
             ObservedState::Unnecessary,
-            engine.check_observed(c.data.token())
+            engine.check_observed(&c)
         );
 
         engine.mark_unobserved(&a);
 
         assert_eq!(
             ObservedState::Unnecessary,
-            engine.check_observed(v1.data.token())
+            engine.check_observed(&v1)
         );
         assert_eq!(
             ObservedState::Unnecessary,
-            engine.check_observed(a.data.token())
+            engine.check_observed(&a)
         );
         assert_eq!(
             ObservedState::Unnecessary,
-            engine.check_observed(b.data.token())
+            engine.check_observed(&b)
         );
         assert_eq!(
             ObservedState::Unnecessary,
-            engine.check_observed(c.data.token())
+            engine.check_observed(&c)
         );
     }
 
