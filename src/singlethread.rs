@@ -158,20 +158,19 @@ impl Engine {
     /// because `anchor` was previously observed, those parents will be unmarked as
     /// necessary.
     pub fn mark_unobserved<O: 'static>(&mut self, anchor: &Anchor<O, Engine>) {
-        self.graph.raw_graph().get_or_default(anchor.data.num).observed.set(false);
-        self.update_necessary_children(anchor.data.num);
+        let node = self.graph.raw_graph().get_or_default(anchor.data.num);
+        node.observed.set(false);
+        Self::update_necessary_children(node);
     }
 
-    fn update_necessary_children(&mut self, id: NodeNum) {
-        if Self::check_observed_raw(self.graph.raw_graph().get_or_default(id)) != ObservedState::Unnecessary {
+    fn update_necessary_children<'a>(node: NodeGuard<'a>) {
+        if Self::check_observed_raw(node) != ObservedState::Unnecessary {
             // we have another parent still observed, so skip this
             return;
         }
-        if let Some(necessary_children) = self.graph.drain_necessary_children(id) {
-            for child in necessary_children {
-                // TODO remove from calculation queue if necessary?
-                self.update_necessary_children(child);
-            }
+        for child in node.drain_necessary_children() {
+            // TODO remove from calculation queue if necessary?
+            Self::update_necessary_children(child);
         }
     }
 
@@ -560,7 +559,8 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
 
     fn unrequest<'out, O: 'static>(&mut self, anchor: &Anchor<O, Self::Engine>) {
         self.engine.graph.set_edge_unnecessary(anchor.data.num, self.node_num);
-        self.engine.update_necessary_children(anchor.data.num);
+        let node = self.engine.graph.raw_graph().get_or_default(anchor.data.num);
+        Engine::update_necessary_children(node);
     }
 
     fn dirty_handle(&mut self) -> DirtyHandle {
