@@ -6,12 +6,12 @@ use crate::AnchorInner;
 use std::marker::PhantomData;
 use slotmap::{secondary::SecondaryMap, Key};
 
-pub (super) struct Graph2<K: Key> {
+pub struct Graph2<K: Key> {
     nodes: Arena<Node>,
     mapping: RefCell<SecondaryMap<K, *const Node>>,
 }
 
-pub (super) struct Node {
+pub struct Node {
     pub observed: Cell<bool>,
     pub valid: Cell<bool>,
 
@@ -36,7 +36,7 @@ pub struct NodePtrs {
 }
 
 #[derive(Clone, Copy)]
-pub (super) struct NodeGuard<'a> {
+pub struct NodeGuard<'a> {
     inside: &'a Node,
     // hack to make NodeGuard invariant
     f: PhantomData<&'a mut &'a ()>,
@@ -111,21 +111,21 @@ impl <'a> NodeGuard<'a> {
 }
 
 impl <K: Key + Copy> Graph2<K> {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             nodes: Arena::new(),
             mapping: RefCell::new(SecondaryMap::new()),
         }
     }
 
-    fn insert<'a>(&'a self, mut node: Node) -> NodeGuard<'a> {
+    pub fn insert<'a>(&'a self, mut node: Node) -> NodeGuard<'a> {
         // SAFETY: ensure ptrs struct is empty on insert
         // TODO this probably is not actually necessary if there's no way to take a Node out of the graph
         node.ptrs = NodePtrs::default();
         NodeGuard {inside: self.nodes.alloc(node), f: PhantomData}
     }
 
-    fn get_mut_or_default<'a>(&'a self, key: K) -> NodeGuard<'a> {
+    pub fn get_mut_or_default<'a>(&'a self, key: K) -> NodeGuard<'a> {
         let mut mapping = self.mapping.borrow_mut();
         if mapping.contains_key(key) {
             NodeGuard {inside: unsafe {&**mapping.get_unchecked(key)}, f: PhantomData}

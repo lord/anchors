@@ -1,5 +1,6 @@
 use slotmap::{secondary::SecondaryMap, Key};
 use std::fmt::Debug;
+use crate::singlethread::graph2::{Graph2};
 
 #[derive(Debug, Clone)]
 struct Node<T: Eq + Copy + Debug + Key + Ord> {
@@ -33,12 +34,14 @@ impl<T: Eq + Copy + Debug + Key + Ord> Default for Node<T> {
 
 pub struct MetadataGraph<T: Eq + Copy + Debug + Key + Ord> {
     nodes: SecondaryMap<T, Node<T>>,
+    graph: Graph2<T>,
 }
 
 impl<T: Eq + Copy + Debug + Key + Ord> MetadataGraph<T> {
     pub fn new() -> Self {
         Self {
             nodes: SecondaryMap::new(),
+            graph: Graph2::new(),
         }
     }
 
