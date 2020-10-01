@@ -279,7 +279,7 @@ impl Graph2 {
         })
     }
 
-    pub fn queue_recalc<'a>(&'a mut self, node: NodeGuard<'a>) {
+    pub fn queue_recalc<'a>(&'a self, node: NodeGuard<'a>) {
         if node.ptrs.recalc_state.get() == NodeState::PendingRecalc {
             // already in recalc queue
             return;
@@ -504,5 +504,48 @@ mod test {
         d.add_clean_parent(e);
         ensure_height_increases(a, b).unwrap();
         a.add_clean_parent(b);
+    }
+
+    #[test]
+    fn test_insert_pop() {
+        let graph = Graph2::new(10);
+
+        let a = graph.insert_testing();
+        set_min_height(a, 0);
+        let b = graph.insert_testing();
+        set_min_height(b, 5);
+        let c = graph.insert_testing();
+        set_min_height(c, 3);
+        let d = graph.insert_testing();
+        set_min_height(d, 4);
+        let e = graph.insert_testing();
+        set_min_height(e, 1);
+
+        graph.queue_recalc(a);
+        graph.queue_recalc(a);
+        graph.queue_recalc(a);
+        graph.queue_recalc(b);
+        graph.queue_recalc(c);
+        graph.queue_recalc(d);
+
+        assert_eq!(Some(a), graph.recalc_pop_next().map(|(_, v)| v));
+        assert_eq!(Some(c), graph.recalc_pop_next().map(|(_, v)| v));
+        assert_eq!(Some(d), graph.recalc_pop_next().map(|(_, v)| v));
+
+        graph.queue_recalc(e);
+
+        assert_eq!(Some(e), graph.recalc_pop_next().map(|(_, v)| v));
+        assert_eq!(Some(b), graph.recalc_pop_next().map(|(_, v)| v));
+
+        assert_eq!(None, graph.recalc_pop_next().map(|(_, v)| v));
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_insert_above_max_height() {
+        let graph = Graph2::new(10);
+        let a = graph.insert_testing();
+        set_min_height(a, 10);
+        graph.queue_recalc(a);
     }
 }
