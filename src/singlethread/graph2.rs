@@ -522,19 +522,19 @@ mod test {
         let graph = Graph2::new(10);
 
         let a = graph.insert_testing();
-        set_min_height(a, 0);
+        set_min_height(a, 0).unwrap();
         let b = graph.insert_testing();
-        set_min_height(b, 5);
+        set_min_height(b, 5).unwrap();
         let c = graph.insert_testing();
-        set_min_height(c, 3);
+        set_min_height(c, 3).unwrap();
         let d = graph.insert_testing();
-        set_min_height(d, 4);
+        set_min_height(d, 4).unwrap();
         let e = graph.insert_testing();
-        set_min_height(e, 1);
+        set_min_height(e, 1).unwrap();
         let e2 = graph.insert_testing();
-        set_min_height(e2, 1);
+        set_min_height(e2, 1).unwrap();
         let e3 = graph.insert_testing();
-        set_min_height(e3, 1);
+        set_min_height(e3, 1).unwrap();
 
         graph.queue_recalc(a);
         graph.queue_recalc(a);
@@ -564,7 +564,7 @@ mod test {
     fn test_insert_above_max_height() {
         let graph = Graph2::new(10);
         let a = graph.insert_testing();
-        set_min_height(a, 10);
+        set_min_height(a, 10).unwrap();
         graph.queue_recalc(a);
     }
 }
