@@ -283,7 +283,7 @@ impl Engine {
     fn garbage_collect(&mut self) {
         let graph = &mut self.graph;
         self.refcounter.drain(|item| {
-            graph.remove(item);
+            // TODO REMOVE NODES
         });
     }
 
@@ -512,9 +512,11 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
     }
 
     fn unrequest<'out, O: 'static>(&mut self, anchor: &Anchor<O, Self::Engine>) {
-        self.engine.graph.set_edge_unnecessary(anchor.data.num, self.node_num);
-        let node = self.engine.graph.raw_graph().get(anchor.data.num).unwrap();
-        Engine::update_necessary_children(node);
+        let child = self.engine.graph.raw_graph().get(anchor.data.num).unwrap();
+        let self_node = self.engine.graph.raw_graph().get(self.node_num).unwrap();
+
+        self_node.remove_necessary_child(child);
+        Engine::update_necessary_children(child);
     }
 
     fn dirty_handle(&mut self) -> DirtyHandle {
