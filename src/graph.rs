@@ -40,28 +40,6 @@ impl MetadataGraph {
         // TODO implement
     }
 
-    pub fn drain_clean_parents<'a>(
-        &'a mut self,
-        node_id: NodeNum,
-    ) -> impl std::iter::Iterator<Item=NodeNum> {
-        let node = self.graph.get(node_id).unwrap();
-        let res: Vec<_> = node.drain_clean_parents().map(|child| child.key.get()).collect();
-        res.into_iter()
-    }
-
-    pub fn drain_necessary_children<'a>(&'a mut self, node_id: NodeNum) -> Option<Vec<NodeNum>> {
-        let node = self.graph.get(node_id).unwrap();
-        let mut res = vec![];
-        for child in node.drain_necessary_children() {
-            res.push(child.key.get());
-        }
-        Some(res)
-    }
-
-    pub fn height(&self, node_id: NodeNum) -> usize {
-        let node = self.graph.get(node_id).unwrap();
-        node.height.get()
-    }
 }
 
 fn set_min_height0<'a>(node: NodeGuard<'a>, min_height: usize) -> Result<(), ()> {

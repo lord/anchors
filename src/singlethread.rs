@@ -164,10 +164,11 @@ impl Engine {
         // stabilize once before, since the stabilization process may mark our requested node
         // as dirty
         self.stabilize();
+        let anchor_node = self.graph.raw_graph().get(anchor.data.num).unwrap();
         if self.to_recalculate.borrow().state(anchor.data.num) != NodeState::Ready {
             self.to_recalculate
             .borrow_mut()
-                .queue_recalc(self.graph.height(anchor.data.num), anchor.data.num);
+                .queue_recalc(anchor_node.height.get(), anchor.data.num);
             // stabilize again, to make sure our target node that is now in the queue is up-to-date
             // use stabilize0 because no dirty marks have occured since last stabilization, and we want
             // to make sure we don't unnecessarily increment generation number
@@ -207,7 +208,10 @@ impl Engine {
             borrow.pop_next()
         };
         while let Some((height, this_node_num)) = next.take() {
-            let calculation_complete = if height == self.graph.height(this_node_num) {
+            let node = self.graph.raw_graph().get(this_node_num).unwrap();
+            let height = node.height.get();
+            let calculation_complete = if height == height {
+                // TODO with new graph we can automatically relocate nodes if their height changes
                 // this nodes height is current, so we can recalculate
                 self.recalculate(this_node_num)
             } else {
@@ -217,7 +221,7 @@ impl Engine {
 
             if !calculation_complete {
                 self.to_recalculate.borrow_mut()
-                    .queue_recalc(self.graph.height(this_node_num), this_node_num);
+                    .queue_recalc(height, this_node_num);
             }
             next = {
                 let mut borrow = self.to_recalculate.borrow_mut();
@@ -354,7 +358,8 @@ impl Engine {
     }
 
     fn mark_node_for_recalculation(&self, node_id: NodeNum) {
-        self.to_recalculate.borrow_mut().queue_recalc(self.graph.height(node_id), node_id);
+        let node = self.graph.raw_graph().get(node_id).unwrap();
+        self.to_recalculate.borrow_mut().queue_recalc(node.height.get(), node_id);
     }
 }
 
