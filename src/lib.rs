@@ -293,7 +293,7 @@ mod test {
     #[test]
     fn test_observed_marking() {
         use crate::singlethread::ObservedState;
-        use crate::AnchorHandle;
+        
 
         let mut engine = crate::singlethread::Engine::new();
         let (v1, _v1_setter) = crate::var::Var::new(1usize);

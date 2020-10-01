@@ -1,7 +1,7 @@
-use std::fmt::Debug;
-use crate::singlethread::graph2::{Graph2, NodeGuard};
 
-use crate::singlethread::NodeNum;
+use crate::singlethread::graph2::{Graph2};
+
+
 
 pub struct MetadataGraph {
     graph: Graph2,

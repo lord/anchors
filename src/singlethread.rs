@@ -12,13 +12,13 @@ use graph2::{Graph2, NodeGuard};
 
 use crate::nodequeue::{NodeQueue, NodeState};
 use crate::refcounter::RefCounter;
-use crate::{graph, Anchor, AnchorInner, OutputContext, Poll, UpdateContext};
-use slotmap::SlotMap;
+use crate::{Anchor, AnchorInner, OutputContext, Poll, UpdateContext};
+
 use std::any::Any;
 use std::cell::RefCell;
 use std::panic::Location;
 use std::rc::Rc;
-use std::cell::Cell;
+
 
 use std::num::NonZeroU64;
 
@@ -207,7 +207,7 @@ impl Engine {
             let mut borrow = self.to_recalculate.borrow_mut();
             borrow.pop_next()
         };
-        while let Some((height, this_node_num)) = next.take() {
+        while let Some((_height, this_node_num)) = next.take() {
             let node = self.graph.get(this_node_num).unwrap();
             let height = node.height.get();
             let calculation_complete = if height == height {
@@ -234,7 +234,7 @@ impl Engine {
 
     /// Returns a debug string containing the current state of the recomputation graph.
     pub fn debug_state(&self) -> String {
-        let mut debug = "".to_string();
+        let debug = "".to_string();
         // for (node_id, _) in nodes.iter() {
         //     let node = self.graph.get(node_id).unwrap();
         //     let necessary = if self.graph.is_necessary(node_id) {
@@ -281,8 +281,8 @@ impl Engine {
     }
 
     fn garbage_collect(&mut self) {
-        let graph = &mut self.graph;
-        self.refcounter.drain(|item| {
+        let _graph = &mut self.graph;
+        self.refcounter.drain(|_item| {
             // TODO REMOVE NODES
         });
     }

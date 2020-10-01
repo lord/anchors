@@ -27,11 +27,11 @@ impl<T: Hash + Eq + Debug + Key> RefCounter<T> {
         }
     }
 
-    pub fn create(&self, item: T) {
+    pub fn create(&self, _item: T) {
         // self.inner.borrow_mut().counts.insert(item, 1);
     }
 
-    pub fn increment(&self, item: T) {
+    pub fn increment(&self, _item: T) {
         // *self
         //     .inner
         //     .borrow_mut()
@@ -40,7 +40,7 @@ impl<T: Hash + Eq + Debug + Key> RefCounter<T> {
         //     .expect("item did not exist when incrementing") += 1;
     }
 
-    pub fn decrement(&self, item: T) {
+    pub fn decrement(&self, _item: T) {
         // let mut inner = self.inner.borrow_mut();
         // let count = inner
         //     .counts
@@ -53,7 +53,7 @@ impl<T: Hash + Eq + Debug + Key> RefCounter<T> {
         // }
     }
 
-    pub fn drain<F: FnMut(T)>(&self, mut f: F) {
+    pub fn drain<F: FnMut(T)>(&self, _f: F) {
         // while self.inner.borrow_mut().deleted.len() > 0 {
         //     let deleted: Vec<_> = self.inner.borrow_mut().deleted.drain(..).collect();
         //     deleted.into_iter().for_each(&mut f);

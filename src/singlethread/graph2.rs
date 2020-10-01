@@ -1,10 +1,10 @@
 use typed_arena::Arena;
 use std::rc::Rc;
 use std::cell::{Cell, RefCell, RefMut};
-use super::{GenericAnchor, AnchorDebugInfo, Engine, Generation};
-use crate::AnchorInner;
+use super::{GenericAnchor, AnchorDebugInfo, Generation};
+
 use std::marker::PhantomData;
-use slotmap::{SlotMap, Key};
+use slotmap::{SlotMap};
 use std::iter::Iterator;
 
 use crate::singlethread::NodeNum;
@@ -204,7 +204,7 @@ impl Graph2 {
         self.get(key).unwrap()
     }
 
-    pub (super) fn insert<'a>(&'a self, mut anchor: Rc<RefCell<dyn GenericAnchor>>, debug_info: AnchorDebugInfo) -> NodeNum {
+    pub (super) fn insert<'a>(&'a self, anchor: Rc<RefCell<dyn GenericAnchor>>, debug_info: AnchorDebugInfo) -> NodeNum {
         self.owned_ids.borrow_mut().insert_with_key(|key| {
             let mut node = Node {
                 observed: Cell::new(false),
@@ -250,7 +250,7 @@ fn set_min_height<'a>(node: NodeGuard<'a>, min_height: usize) -> Result<(), ()> 
         node.height.set(min_height);
         let mut did_err = false;
         for parent in node.clean_parents() {
-            if let Err(mut loop_ids) = set_min_height(parent, min_height + 1) {
+            if let Err(_loop_ids) = set_min_height(parent, min_height + 1) {
                 did_err = true;
             }
         };
@@ -266,9 +266,9 @@ fn set_min_height<'a>(node: NodeGuard<'a>, min_height: usize) -> Result<(), ()> 
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::ops::Deref;
-    use slotmap::KeyData;
-    use crate::constant::Constant;
+    
+    
+    
 
     fn to_vec<I: std::iter::Iterator>(iter: I) -> Vec<I::Item> {
         iter.collect()
@@ -276,7 +276,7 @@ mod test {
 
     #[test]
     fn set_edge_updates_correctly() {
-        let mut graph = Graph2::new();
+        let graph = Graph2::new();
         let a = graph.insert_testing();
         let b = graph.insert_testing();
         let empty: Vec<NodeGuard<'_>> = vec![];
@@ -330,7 +330,7 @@ mod test {
 
     #[test]
     fn height_calculated_correctly() {
-        let mut graph = Graph2::new();
+        let graph = Graph2::new();
         let a = graph.insert_testing();
         let b = graph.insert_testing();
         let c = graph.insert_testing();
@@ -364,7 +364,7 @@ mod test {
 
     #[test]
     fn cycles_cause_error() {
-        let mut graph = Graph2::new();
+        let graph = Graph2::new();
         let b = graph.insert_testing();
         let c = graph.insert_testing();
         ensure_height_increases(b, c).unwrap();
@@ -374,7 +374,7 @@ mod test {
 
     #[test]
     fn non_cycles_wont_cause_errors() {
-        let mut graph = Graph2::new();
+        let graph = Graph2::new();
         let a = graph.insert_testing();
         let b = graph.insert_testing();
         let c = graph.insert_testing();
