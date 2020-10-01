@@ -10,7 +10,7 @@ pub mod graph2;
 
 use graph2::{Graph2, NodeGuard};
 
-use crate::nodequeue::{NodeQueue, NodeState};
+use crate::nodequeue::{NodeState};
 use crate::refcounter::RefCounter;
 use crate::{Anchor, AnchorInner, OutputContext, Poll, UpdateContext};
 
@@ -64,7 +64,6 @@ slotmap::new_key_type! {
 pub struct Engine {
     // TODO store Nodes on heap directly?? maybe try for Rc<RefCell<SlotMap>> now
     graph: Rc<Graph2>,
-    to_recalculate: RefCell<NodeQueue<NodeNum>>,
     dirty_marks: Rc<RefCell<Vec<NodeNum>>>,
     refcounter: RefCounter<NodeNum>,
 
@@ -118,7 +117,6 @@ impl Engine {
         DEFAULT_MOUNTER.with(|v| *v.borrow_mut() = Some(mounter));
         Self {
             graph,
-            to_recalculate: RefCell::new(NodeQueue::new(max_height)),
             dirty_marks: Default::default(),
             refcounter,
             queue: vec![],
@@ -131,9 +129,10 @@ impl Engine {
     /// often, it's best to mark it as Observed so that Anchors can calculate its
     /// dependencies faster.
     pub fn mark_observed<O: 'static>(&mut self, anchor: &Anchor<O, Engine>) {
-        self.graph.get(anchor.data.num).unwrap().observed.set(true);
-        if self.to_recalculate.borrow().state(anchor.data.num) != NodeState::Ready {
-            self.mark_node_for_recalculation(anchor.data.num);
+        let node = self.graph.get(anchor.data.num).unwrap();
+        node.observed.set(true);
+        if graph2::recalc_state(node) != NodeState::Ready {
+            self.graph.queue_recalc(node);
         }
     }
 
@@ -164,10 +163,8 @@ impl Engine {
         // as dirty
         self.stabilize();
         let anchor_node = self.graph.get(anchor.data.num).unwrap();
-        if self.to_recalculate.borrow().state(anchor.data.num) != NodeState::Ready {
-            self.to_recalculate
-                .borrow_mut()
-                .queue_recalc(graph2::height(anchor_node), anchor.data.num);
+        if graph2::recalc_state(anchor_node) != NodeState::Ready {
+            self.graph.queue_recalc(anchor_node);
             // stabilize again, to make sure our target node that is now in the queue is up-to-date
             // use stabilize0 because no dirty marks have occured since last stabilization, and we want
             // to make sure we don't unnecessarily increment generation number
@@ -202,31 +199,19 @@ impl Engine {
 
     /// internal function for stabilization. does not update dirty marks or increment the stabilization number
     fn stabilize0(&mut self) {
-        let mut next = {
-            let mut borrow = self.to_recalculate.borrow_mut();
-            borrow.pop_next()
-        };
-        while let Some((_height, this_node_num)) = next.take() {
-            let node = self.graph.get(this_node_num).unwrap();
-            let height = graph2::height(node);
-            let calculation_complete = if height == height {
+        while let Some((height, node)) = self.graph.recalc_pop_next() {
+            let calculation_complete = if graph2::height(node) == height {
                 // TODO with new graph we can automatically relocate nodes if their height changes
                 // this nodes height is current, so we can recalculate
-                self.recalculate(this_node_num)
+                self.recalculate(node.key.get())
             } else {
                 // skip calculation, redo at correct height
                 false
             };
 
             if !calculation_complete {
-                self.to_recalculate
-                    .borrow_mut()
-                    .queue_recalc(height, this_node_num);
+                self.graph.queue_recalc(node);
             }
-            next = {
-                let mut borrow = self.to_recalculate.borrow_mut();
-                borrow.pop_next()
-            };
         }
 
         self.garbage_collect();
@@ -288,7 +273,7 @@ impl Engine {
     }
 
     /// returns false if calculation is still pending
-    fn recalculate(&mut self, this_node_num: NodeNum) -> bool {
+    fn recalculate(&self, this_node_num: NodeNum) -> bool {
         let this_anchor = self.graph.get(this_node_num).unwrap().anchor.clone();
         let mut ecx = EngineContextMut {
             engine: self,
@@ -328,7 +313,7 @@ impl Engine {
 
     // skip_self = true indicates output has *definitely* changed, but node has been recalculated
     // skip_self = false indicates node has not yet been recalculated
-    fn mark_dirty(&mut self, node_id: NodeNum, skip_self: bool) {
+    fn mark_dirty(&self, node_id: NodeNum, skip_self: bool) {
         let node = self.graph.get(node_id).unwrap();
         if skip_self {
             let parents = node.drain_clean_parents();
@@ -342,25 +327,18 @@ impl Engine {
         }
     }
 
-    fn mark_dirty0<'a>(&self, next: NodeGuard<'a>) {
+    fn mark_dirty0<'a>(&'a self, next: NodeGuard<'a>) {
         let id = next.key.get();
         if Self::check_observed_raw(next) != ObservedState::Unnecessary {
-            self.mark_node_for_recalculation(id);
-        } else if self.to_recalculate.borrow_mut().state(id) == NodeState::Ready {
-            self.to_recalculate.borrow_mut().needs_recalc(id);
+            self.graph.queue_recalc(next);
+        } else if graph2::recalc_state(next) == NodeState::Ready {
+            graph2::needs_recalc(next);
             let parents = next.drain_clean_parents();
             for parent in parents {
                 parent.anchor.borrow_mut().dirty(&id);
                 self.mark_dirty0(parent);
             }
         }
-    }
-
-    fn mark_node_for_recalculation(&self, node_id: NodeNum) {
-        let node = self.graph.get(node_id).unwrap();
-        self.to_recalculate
-            .borrow_mut()
-            .queue_recalc(graph2::height(node), node_id);
     }
 }
 
@@ -411,7 +389,7 @@ struct EngineContext<'eng> {
 }
 
 struct EngineContextMut<'eng> {
-    engine: &'eng mut Engine,
+    engine: &'eng Engine,
     node_num: NodeNum,
     pending_on_anchor_get: bool,
 }
@@ -423,10 +401,10 @@ impl<'eng> OutputContext<'eng> for EngineContext<'eng> {
     where
         'eng: 'out,
     {
-        if self.engine.to_recalculate.borrow().state(anchor.data.num) != NodeState::Ready {
+        let node = self.engine.graph.get(anchor.data.num).unwrap();
+        if graph2::recalc_state(node) != NodeState::Ready {
             panic!("attempted to get node that was not previously requested")
         }
-        let node = self.engine.graph.get(anchor.data.num).unwrap();
         let unsafe_borrow = unsafe { node.anchor.as_ptr().as_ref().unwrap() };
         let output: &O = unsafe_borrow
             .output(&mut EngineContext {
@@ -446,11 +424,11 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
     where
         'slf: 'out,
     {
-        if self.engine.to_recalculate.borrow().state(anchor.data.num) != NodeState::Ready {
+        let node = self.engine.graph.get(anchor.data.num).unwrap();
+        if graph2::recalc_state(node) != NodeState::Ready {
             panic!("attempted to get node that was not previously requested")
         }
 
-        let node = self.engine.graph.get(anchor.data.num).unwrap();
         let unsafe_borrow = unsafe { node.anchor.as_ptr().as_ref().unwrap() };
         let output: &O = unsafe_borrow
             .output(&mut EngineContext {
@@ -480,9 +458,9 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
             Engine::check_observed_raw(self.engine.graph.get(self.node_num).unwrap())
                 != ObservedState::Unnecessary;
 
-        if self.engine.to_recalculate.borrow().state(anchor.data.num) != NodeState::Ready {
+        if graph2::recalc_state(child) != NodeState::Ready {
             self.pending_on_anchor_get = true;
-            self.engine.mark_node_for_recalculation(anchor.data.num);
+            self.engine.graph.queue_recalc(child);
             if necessary && self_is_necessary {
                 self_node.add_necessary_child(child);
             }

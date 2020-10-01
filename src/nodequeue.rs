@@ -26,34 +26,4 @@ impl<T: Key> NodeQueue<T> {
             states: SecondaryMap::new(),
         }
     }
-
-    pub fn queue_recalc(&mut self, height: usize, node: T) {
-        let old = self.states.insert(node.clone(), NodeState::PendingRecalc);
-        if old == Some(NodeState::PendingRecalc) {
-            return;
-        }
-        self.heap.insert(height, node);
-    }
-
-    pub fn needs_recalc(&mut self, node: T) {
-        if self.states.get(node.clone()) != Some(&NodeState::Ready) {
-            panic!("node queued for recalc, someone tried to mark it as NeedsRecalc");
-        }
-        self.states.insert(node, NodeState::NeedsRecalc);
-    }
-
-    pub fn pop_next(&mut self) -> Option<(usize, T)> {
-        let next = self.heap.pop_min();
-        if let Some((_, next)) = next.clone() {
-            self.states.insert(next, NodeState::Ready);
-        }
-        next
-    }
-
-    pub fn state(&self, node: T) -> NodeState {
-        self.states
-            .get(node)
-            .cloned()
-            .unwrap_or(NodeState::NeedsRecalc)
-    }
 }

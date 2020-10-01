@@ -372,7 +372,7 @@ pub fn needs_recalc<'a>(node: NodeGuard<'a>) {
         // already in recalc queue, or already pending recalc
         return;
     }
-    node.ptrs.recalc_state.set(NodeState::PendingRecalc);
+    node.ptrs.recalc_state.set(NodeState::NeedsRecalc);
 }
 
 pub fn recalc_state<'a>(node: NodeGuard<'a>) -> NodeState {
