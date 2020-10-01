@@ -81,7 +81,7 @@ impl crate::Engine for Engine {
                 .as_mut()
                 .expect("no engine was initialized. did you call `Engine::new()`?");
             let debug_info = inner.debug_info();
-            let num = this.graph.insert(Rc::new(RefCell::new(inner)), debug_info);
+            let num = this.graph.insert(RefCell::new(Box::new(inner)), debug_info);
             this.refcounter.create(num);
             Anchor::new(AnchorHandle {
                 num,
@@ -160,7 +160,7 @@ impl Engine {
             // to make sure we don't unnecessarily increment generation number
             self.stabilize0();
         }
-        let target_anchor = self.graph.get(anchor.data.num).unwrap().anchor.clone();
+        let target_anchor = &self.graph.get(anchor.data.num).unwrap().anchor;
         let borrow = target_anchor.borrow();
         borrow
             .output(&mut EngineContext {
@@ -264,7 +264,7 @@ impl Engine {
 
     /// returns false if calculation is still pending
     fn recalculate<'a>(&'a self, node: NodeGuard<'a>) -> bool {
-        let this_anchor = node.anchor.clone();
+        let this_anchor = &node.anchor;
         let mut ecx = EngineContextMut {
             engine: self,
             node: node,

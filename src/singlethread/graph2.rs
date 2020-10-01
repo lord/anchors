@@ -52,7 +52,7 @@ pub struct Node {
     /// tracks the generation when this Node last polled as Updated
     pub(super) last_update: Cell<Option<Generation>>,
 
-    pub(super) anchor: Rc<RefCell<dyn GenericAnchor>>,
+    pub(super) anchor: RefCell<Box<dyn GenericAnchor>>,
 
     pub ptrs: NodePtrs,
 }
@@ -272,7 +272,7 @@ impl Graph2 {
     #[cfg(test)]
     pub fn insert_testing<'a>(&'a self) -> NodeGuard<'a> {
         let key = self.insert(
-            Rc::new(RefCell::new(crate::constant::Constant::new_raw_testing(
+            RefCell::new(Box::new(crate::constant::Constant::new_raw_testing(
                 123,
             ))),
             AnchorDebugInfo {
@@ -285,7 +285,7 @@ impl Graph2 {
 
     pub(super) fn insert<'a>(
         &'a self,
-        anchor: Rc<RefCell<dyn GenericAnchor>>,
+        anchor: RefCell<Box<dyn GenericAnchor>>,
         debug_info: AnchorDebugInfo,
     ) -> NodeKey {
         let mut node = Node {
