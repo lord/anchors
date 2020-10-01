@@ -81,7 +81,7 @@ impl crate::Engine for Engine {
                 .as_mut()
                 .expect("no engine was initialized. did you call `Engine::new()`?");
             let debug_info = inner.debug_info();
-            let num = this.graph.insert(RefCell::new(Box::new(inner)), debug_info);
+            let num = this.graph.insert(Box::new(inner), debug_info);
             this.refcounter.create(num);
             Anchor::new(AnchorHandle {
                 num,
@@ -163,6 +163,8 @@ impl Engine {
         let target_anchor = &self.graph.get(anchor.data.num).unwrap().anchor;
         let borrow = target_anchor.borrow();
         borrow
+            .as_ref()
+            .unwrap()
             .output(&mut EngineContext {
                 engine: &self,
             })
@@ -270,7 +272,7 @@ impl Engine {
             node: node,
             pending_on_anchor_get: false,
         };
-        let poll_result = this_anchor.borrow_mut().poll_updated(&mut ecx);
+        let poll_result = this_anchor.borrow_mut().as_mut().unwrap().poll_updated(&mut ecx);
         let pending_on_anchor_get = ecx.pending_on_anchor_get;
         match poll_result {
             Poll::Pending => {
@@ -306,7 +308,7 @@ impl Engine {
             let parents = node.drain_clean_parents();
             for parent in parents {
                 // TODO still calling dirty twice on observed relationships
-                parent.anchor.borrow_mut().dirty(&node.key());
+                parent.anchor.borrow_mut().as_mut().unwrap().dirty(&node.key());
                 self.mark_dirty0(parent);
             }
         } else {
@@ -322,7 +324,7 @@ impl Engine {
             graph2::needs_recalc(next);
             let parents = next.drain_clean_parents();
             for parent in parents {
-                parent.anchor.borrow_mut().dirty(&id);
+                parent.anchor.borrow_mut().as_mut().unwrap().dirty(&id);
                 self.mark_dirty0(parent);
             }
         }
@@ -393,6 +395,8 @@ impl<'eng> OutputContext<'eng> for EngineContext<'eng> {
         }
         let unsafe_borrow = unsafe { node.anchor.as_ptr().as_ref().unwrap() };
         let output: &O = unsafe_borrow
+            .as_ref()
+            .unwrap()
             .output(&mut EngineContext {
                 engine: self.engine,
             })
@@ -416,6 +420,8 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
 
         let unsafe_borrow = unsafe { node.anchor.as_ptr().as_ref().unwrap() };
         let output: &O = unsafe_borrow
+            .as_ref()
+            .unwrap()
             .output(&mut EngineContext {
                 engine: self.engine,
             })

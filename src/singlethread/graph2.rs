@@ -35,7 +35,6 @@ pub struct Graph2 {
 
 pub struct Node {
     pub observed: Cell<bool>,
-    pub valid: Cell<bool>,
 
     /// bool used during height incrementing to check for loops
     pub visited: Cell<bool>,
@@ -52,7 +51,8 @@ pub struct Node {
     /// tracks the generation when this Node last polled as Updated
     pub(super) last_update: Cell<Option<Generation>>,
 
-    pub(super) anchor: RefCell<Box<dyn GenericAnchor>>,
+    /// Some() if this node is still active, None otherwise
+    pub(super) anchor: RefCell<Option<Box<dyn GenericAnchor>>>,
 
     pub ptrs: NodePtrs,
 }
@@ -272,9 +272,9 @@ impl Graph2 {
     #[cfg(test)]
     pub fn insert_testing<'a>(&'a self) -> NodeGuard<'a> {
         let key = self.insert(
-            RefCell::new(Box::new(crate::constant::Constant::new_raw_testing(
+            Box::new(crate::constant::Constant::new_raw_testing(
                 123,
-            ))),
+            )),
             AnchorDebugInfo {
                 location: None,
                 type_info: "testing dummy anchor",
@@ -285,12 +285,11 @@ impl Graph2 {
 
     pub(super) fn insert<'a>(
         &'a self,
-        anchor: RefCell<Box<dyn GenericAnchor>>,
+        anchor: Box<dyn GenericAnchor>,
         debug_info: AnchorDebugInfo,
     ) -> NodeKey {
         let mut node = Node {
             observed: Cell::new(false),
-            valid: Cell::new(false),
             visited: Cell::new(false),
             necessary_count: Cell::new(0),
             token: self.token,
@@ -298,7 +297,7 @@ impl Graph2 {
             debug_info: Cell::new(debug_info),
             last_ready: Cell::new(None),
             last_update: Cell::new(None),
-            anchor,
+            anchor: RefCell::new(Some(anchor)),
         };
         // SAFETY: ensure ptrs struct is empty on insert
         // TODO this probably is not actually necessary if there's no way to take a Node out of the graph
