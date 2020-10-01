@@ -491,10 +491,7 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
             self.pending_on_anchor_get = true;
             Poll::Pending
         } else {
-            self.engine.graph.set_edge_clean(
-                anchor.data.num,
-                self.node_num,
-            );
+            child.add_clean_parent(self_node);
             if necessary && self_is_necessary {
                 self_node.add_necessary_child(child);
             }

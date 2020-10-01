@@ -17,32 +17,4 @@ impl MetadataGraph {
     pub fn raw_graph(&self) -> &Graph2 {
         &self.graph
     }
-
-    pub fn set_edge_clean(&self, child: NodeNum, parent: NodeNum) {
-        let parent = self.graph.get(parent).unwrap();
-        let child = self.graph.get(child).unwrap();
-        child.add_clean_parent(parent);
-    }
 }
-
-fn set_min_height0<'a>(node: NodeGuard<'a>, min_height: usize) -> Result<(), ()> {
-    if node.visited.get() {
-        return Err(());
-    }
-    node.visited.set(true);
-    if node.height.get() < min_height {
-        node.height.set(min_height);
-        let mut did_err = false;
-        for parent in node.clean_parents() {
-            if let Err(mut loop_ids) = set_min_height0(parent, min_height + 1) {
-                did_err = true;
-            }
-        };
-        if did_err {
-            return Err(())
-        }
-    }
-    node.visited.set(false);
-    Ok(())
-}
-
