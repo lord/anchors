@@ -180,7 +180,8 @@ impl Engine {
     pub(crate) fn update_dirty_marks(&mut self) {
         let dirty_marks = std::mem::replace(&mut *self.dirty_marks.borrow_mut(), Vec::new());
         for dirty in dirty_marks {
-            self.mark_dirty(dirty, false);
+            let node = self.graph.get(dirty).unwrap();
+            self.mark_dirty(node, false);
         }
     }
 
@@ -198,7 +199,7 @@ impl Engine {
             let calculation_complete = if graph2::height(node) == height {
                 // TODO with new graph we can automatically relocate nodes if their height changes
                 // this nodes height is current, so we can recalculate
-                self.recalculate(node.key.get())
+                self.recalculate(node)
             } else {
                 // skip calculation, redo at correct height
                 false
@@ -268,8 +269,9 @@ impl Engine {
     }
 
     /// returns false if calculation is still pending
-    fn recalculate(&self, this_node_num: NodeNum) -> bool {
-        let this_anchor = self.graph.get(this_node_num).unwrap().anchor.clone();
+    fn recalculate<'a>(&'a self, node: NodeGuard<'a>) -> bool {
+        let this_anchor = node.anchor.clone();
+        let this_node_num = node.key.get();
         let mut ecx = EngineContextMut {
             engine: self,
             node_num: this_node_num,
@@ -292,7 +294,7 @@ impl Engine {
             }
             Poll::Updated => {
                 // make sure all parents are marked as dirty, and observed parents are recalculated
-                self.mark_dirty(this_node_num, true);
+                self.mark_dirty(node, true);
                 let node = self.graph.get(this_node_num).unwrap();
                 node.last_update.set(Some(self.generation));
                 node.last_ready.set(Some(self.generation));
@@ -308,13 +310,12 @@ impl Engine {
 
     // skip_self = true indicates output has *definitely* changed, but node has been recalculated
     // skip_self = false indicates node has not yet been recalculated
-    fn mark_dirty(&self, node_id: NodeNum, skip_self: bool) {
-        let node = self.graph.get(node_id).unwrap();
+    fn mark_dirty<'a>(&'a self, node: NodeGuard<'a>, skip_self: bool) {
         if skip_self {
             let parents = node.drain_clean_parents();
             for parent in parents {
                 // TODO still calling dirty twice on observed relationships
-                parent.anchor.borrow_mut().dirty(&node_id);
+                parent.anchor.borrow_mut().dirty(&node.key.get());
                 self.mark_dirty0(parent);
             }
         } else {
