@@ -14,7 +14,7 @@ pub struct Graph2 {
     owned_ids: RefCell<SlotMap<NodeNum, *const Node>>,
 
     /// height -> first node in that height's queue
-    recalc_queues: Vec<Option<*const Node>>,
+    recalc_queues: RefCell<Vec<Option<*const Node>>>,
 }
 
 pub struct Node {
@@ -217,7 +217,7 @@ impl Graph2 {
         Self {
             nodes: Arena::new(),
             owned_ids: RefCell::new(SlotMap::with_key()),
-            recalc_queues: vec![None; max_height],
+            recalc_queues: RefCell::new(vec![None; max_height]),
         }
     }
 
