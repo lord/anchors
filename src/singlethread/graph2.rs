@@ -9,12 +9,16 @@ use std::marker::PhantomData;
 
 use crate::singlethread::NodeNum;
 
+pub use crate::nodequeue::NodeState;
+
 pub struct Graph2 {
     nodes: Arena<Node>,
     owned_ids: RefCell<SlotMap<NodeNum, *const Node>>,
 
     /// height -> first node in that height's queue
     recalc_queues: RefCell<Vec<Option<*const Node>>>,
+    recalc_min_height: Cell<usize>,
+    recalc_max_height: Cell<usize>,
 }
 
 pub struct Node {
@@ -46,6 +50,12 @@ pub struct NodePtrs {
     /// first parent, remaining parents. unsorted, duplicates may exist
     clean_parent0: Cell<Option<*const Node>>,
     clean_parents: RefCell<Vec<*const Node>>,
+
+    /// Next node in recalc linked list for this height. If this is the last node, None.
+    recalc_next: Cell<Option<*const Node>>,
+    /// Prev node in recalc linked list for this height. IF this is the head node, None.
+    recalc_prev: Cell<Option<*const Node>>,
+    recalc_state: Cell<NodeState>,
 
     /// sorted in pointer order
     necessary_children: RefCell<Vec<*const Node>>,
@@ -218,6 +228,8 @@ impl Graph2 {
             nodes: Arena::new(),
             owned_ids: RefCell::new(SlotMap::with_key()),
             recalc_queues: RefCell::new(vec![None; max_height]),
+            recalc_min_height: Cell::new(max_height),
+            recalc_max_height: Cell::new(0),
         }
     }
 
@@ -266,6 +278,55 @@ impl Graph2 {
             f: PhantomData,
         })
     }
+
+    pub fn queue_recalc<'a>(&'a mut self, node: NodeGuard<'a>) {
+        if node.ptrs.recalc_state.get() == NodeState::PendingRecalc {
+            // already in recalc queue
+            return;
+        }
+        node.ptrs.recalc_state.set(NodeState::PendingRecalc);
+        let node_height = height(node);
+        let mut recalc_queues = self.recalc_queues.borrow_mut();
+        if node_height >= recalc_queues.len() {
+            panic!("too large height error");
+        }
+        if let Some(old) = recalc_queues[node_height] {
+            unsafe {&*old}.ptrs.recalc_prev.set(Some(node.inside as *const Node));
+            node.ptrs.recalc_next.set(Some(old as *const Node));
+        } else {
+            if self.recalc_min_height.get() > node_height {
+                self.recalc_min_height.set(node_height);
+            }
+            if self.recalc_max_height.get() < node_height {
+                self.recalc_max_height.set(node_height);
+            }
+        }
+        recalc_queues[node_height] = Some(node.inside as *const Node);
+    }
+
+    pub fn recalc_pop_next<'a>(&'a self) -> Option<(usize, NodeGuard<'a>)> {
+        let mut recalc_queues = self.recalc_queues.borrow_mut();
+        while self.recalc_min_height.get() <= self.recalc_max_height.get() {
+            if let Some(ptr) = recalc_queues[self.recalc_min_height.get()] {
+                let node = unsafe { &*ptr };
+                recalc_queues[self.recalc_min_height.get()] = node.ptrs.recalc_next.get();
+                if let Some(next_in_queue_ptr) = node.ptrs.recalc_next.get() {
+                    unsafe {&*next_in_queue_ptr}.ptrs.recalc_prev.set(None);
+                }
+                node.ptrs.recalc_prev.set(None);
+                node.ptrs.recalc_next.set(None);
+                node.ptrs.recalc_state.set(NodeState::Ready);
+                return Some((self.recalc_min_height.get(), NodeGuard {
+                    inside: node,
+                    f: PhantomData,
+                }));
+            } else {
+                self.recalc_min_height.set(self.recalc_min_height.get() + 1);
+            }
+        }
+        self.recalc_max_height.set(0);
+        None
+    }
 }
 
 pub fn ensure_height_increases<'a>(
@@ -304,6 +365,18 @@ fn set_min_height<'a>(node: NodeGuard<'a>, min_height: usize) -> Result<(), ()> 
 
 pub fn height<'a>(node: NodeGuard<'a>) -> usize {
     node.ptrs.height.get()
+}
+
+pub fn needs_recalc<'a>(node: NodeGuard<'a>) {
+    if node.ptrs.recalc_state.get() != NodeState::Ready {
+        // already in recalc queue, or already pending recalc
+        return;
+    }
+    node.ptrs.recalc_state.set(NodeState::PendingRecalc);
+}
+
+pub fn recalc_state<'a>(node: NodeGuard<'a>) -> NodeState {
+    node.ptrs.recalc_state.get()
 }
 
 #[cfg(test)]

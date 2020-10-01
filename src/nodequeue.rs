@@ -8,6 +8,12 @@ pub enum NodeState {
     Ready,
 }
 
+impl Default for NodeState {
+    fn default() -> Self {
+        NodeState::NeedsRecalc
+    }
+}
+
 pub struct NodeQueue<T: Key> {
     heap: FakeHeap<T>,
     states: SecondaryMap<T, NodeState>,
