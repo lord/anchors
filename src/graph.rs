@@ -18,16 +18,6 @@ impl MetadataGraph {
         &self.graph
     }
 
-    pub fn raw_ensure_height_increases<'a>(child: NodeGuard<'a>, parent: NodeGuard<'a>) -> Result<bool, ()> {
-        if child.height.get() < parent.height.get() {
-            return Ok(true);
-        }
-        child.visited.set(true);
-        let res = set_min_height0(parent, child.height.get() + 1);
-        child.visited.set(false);
-        res.map(|()| false)
-    }
-
     pub fn set_edge_clean(&self, child: NodeNum, parent: NodeNum) {
         let parent = self.graph.get(parent).unwrap();
         let child = self.graph.get(child).unwrap();
@@ -50,32 +40,12 @@ impl MetadataGraph {
         // TODO implement
     }
 
-    #[allow(dead_code)]
-    pub fn clean_parents<'a>(
-        &'a self,
-        node_id: NodeNum,
-    ) -> impl std::iter::Iterator<Item = NodeNum> {
-        let node = self.graph.get(node_id).unwrap();
-        let res: Vec<_> = node.clean_parents().map(|child| child.key.get()).collect();
-        res.into_iter()
-    }
-
     pub fn drain_clean_parents<'a>(
         &'a mut self,
         node_id: NodeNum,
     ) -> impl std::iter::Iterator<Item=NodeNum> {
         let node = self.graph.get(node_id).unwrap();
         let res: Vec<_> = node.drain_clean_parents().map(|child| child.key.get()).collect();
-        res.into_iter()
-    }
-
-    #[allow(dead_code)]
-    pub fn necessary_children<'a>(&'a self, node_id: NodeNum) -> impl std::iter::Iterator<Item = NodeNum> {
-        let node = self.graph.get(node_id).unwrap();
-        let mut res = vec![];
-        for child in node.necessary_children() {
-            res.push(child.key.get());
-        }
         res.into_iter()
     }
 
@@ -86,11 +56,6 @@ impl MetadataGraph {
             res.push(child.key.get());
         }
         Some(res)
-    }
-
-    pub fn is_necessary(&self, node_id: NodeNum) -> bool {
-        let node = self.graph.get(node_id).unwrap();
-        node.necessary_count.get() > 0
     }
 
     pub fn height(&self, node_id: NodeNum) -> usize {
