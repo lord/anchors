@@ -18,15 +18,6 @@ impl MetadataGraph {
         &self.graph
     }
 
-    /// Returns Ok(true) if height was already increasing, Ok(false) if was not already increasing, and Err if there's a cycle.
-    /// The error message is the list of node ids in the cycle.
-    pub fn ensure_height_increases(&self, child: NodeNum, parent: NodeNum) -> Result<bool, Vec<NodeNum>> {
-        let parent = self.graph.get(parent).unwrap();
-        let child = self.graph.get(child).unwrap();
-
-        Self::raw_ensure_height_increases(child, parent).map_err(|()| vec![])
-    }
-
     pub fn raw_ensure_height_increases<'a>(child: NodeGuard<'a>, parent: NodeGuard<'a>) -> Result<bool, ()> {
         if child.height.get() < parent.height.get() {
             return Ok(true);

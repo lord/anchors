@@ -465,16 +465,10 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
     ) -> Poll {
         let self_node = self.engine.graph.raw_graph().get(self.node_num).unwrap();
         let child = self.engine.graph.raw_graph().get(anchor.data.num).unwrap();
-        let height_already_increased = match self.engine.graph.ensure_height_increases(anchor.data.num, self.node_num) {
+        let height_already_increased = match graph2::ensure_height_increases(child, self_node) {
             Ok(v) => v,
-            Err(cycle) => {
-                let mut debug_str = "".to_string();
-                for id in &cycle {
-                    let name = self.engine.graph.raw_graph().get(*id).unwrap().debug_info.get().to_string();
-                    debug_str.push_str("\n-> ");
-                    debug_str.push_str(&name);
-                }
-                panic!("loop detected:{}\n", debug_str);
+            Err(()) => {
+                panic!("loop detected in anchors!\n");
             }
         };
 
