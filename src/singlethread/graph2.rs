@@ -54,6 +54,21 @@ pub struct NodeGuard<'a> {
     f: PhantomData<&'a mut &'a ()>,
 }
 
+use std::fmt;
+impl fmt::Debug for NodeGuard<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("NodeGuard")
+        .field("inside.key", &self.inside.key.get())
+        .finish()
+    }
+}
+
+impl PartialEq for NodeGuard<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::eq(self.inside, other.inside)
+    }
+}
+
 impl <'a> std::ops::Deref for NodeGuard<'a> {
     type Target = Node;
     fn deref(&self) -> &Node {
@@ -181,11 +196,12 @@ impl Graph2 {
     }
 
     #[cfg(test)]
-    pub fn insert_testing(&self) -> NodeNum {
-        self.insert(Rc::new(RefCell::new(crate::constant::Constant::new_raw_testing(123))), AnchorDebugInfo {
+    pub fn insert_testing<'a>(&'a self) -> NodeGuard<'a> {
+        let key = self.insert(Rc::new(RefCell::new(crate::constant::Constant::new_raw_testing(123))), AnchorDebugInfo {
             location: None,
             type_info: "testing dummy anchor",
-        })
+        });
+        self.get(key).unwrap()
     }
 
     pub (super) fn insert<'a>(&'a self, mut anchor: Rc<RefCell<dyn GenericAnchor>>, debug_info: AnchorDebugInfo) -> NodeNum {
@@ -215,6 +231,165 @@ impl Graph2 {
     }
 }
 
-#[test]
-fn test_fails() {
+pub fn ensure_height_increases<'a>(child: NodeGuard<'a>, parent: NodeGuard<'a>) -> Result<bool, ()> {
+    if child.height.get() < parent.height.get() {
+        return Ok(true);
+    }
+    child.visited.set(true);
+    let res = set_min_height(parent, child.height.get() + 1);
+    child.visited.set(false);
+    res.map(|()| false)
+}
+
+fn set_min_height<'a>(node: NodeGuard<'a>, min_height: usize) -> Result<(), ()> {
+    if node.visited.get() {
+        return Err(());
+    }
+    node.visited.set(true);
+    if node.height.get() < min_height {
+        node.height.set(min_height);
+        let mut did_err = false;
+        for parent in node.clean_parents() {
+            if let Err(mut loop_ids) = set_min_height(parent, min_height + 1) {
+                did_err = true;
+            }
+        };
+        if did_err {
+            return Err(())
+        }
+    }
+    node.visited.set(false);
+    Ok(())
+}
+
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::ops::Deref;
+    use slotmap::KeyData;
+    use crate::constant::Constant;
+
+    fn to_vec<I: std::iter::Iterator>(iter: I) -> Vec<I::Item> {
+        iter.collect()
+    }
+
+    #[test]
+    fn set_edge_updates_correctly() {
+        let mut graph = Graph2::new();
+        let a = graph.insert_testing();
+        let b = graph.insert_testing();
+        let empty: Vec<NodeGuard<'_>> = vec![];
+
+        assert_eq!(empty, to_vec(a.necessary_children()));
+        assert_eq!(empty, to_vec(a.clean_parents()));
+        assert_eq!(empty, to_vec(b.necessary_children()));
+        assert_eq!(empty, to_vec(b.clean_parents()));
+        assert_eq!(false, a.necessary_count.get() > 0);
+        assert_eq!(false, b.necessary_count.get() > 0);
+
+        assert_eq!(Ok(false), ensure_height_increases(a, b));
+        assert_eq!(Ok(true), ensure_height_increases(a, b));
+        a.add_clean_parent(b);
+
+        assert_eq!(empty, to_vec(a.necessary_children()));
+        assert_eq!(vec![b], to_vec(a.clean_parents()));
+        assert_eq!(empty, to_vec(b.necessary_children()));
+        assert_eq!(empty, to_vec(b.clean_parents()));
+        assert_eq!(false, a.necessary_count.get() > 0);
+        assert_eq!(false, b.necessary_count.get() > 0);
+
+        assert_eq!(Ok(true), ensure_height_increases(a, b));
+        b.add_necessary_child(a);
+
+        assert_eq!(empty, to_vec(a.necessary_children()));
+        assert_eq!(vec![b], to_vec(a.clean_parents()));
+        assert_eq!(vec![a], to_vec(b.necessary_children()));
+        assert_eq!(empty, to_vec(b.clean_parents()));
+        assert_eq!(true, a.necessary_count.get() > 0);
+        assert_eq!(false, b.necessary_count.get() > 0);
+
+        a.drain_clean_parents();
+
+        assert_eq!(empty, to_vec(a.necessary_children()));
+        assert_eq!(empty, to_vec(a.clean_parents()));
+        assert_eq!(vec![a], to_vec(b.necessary_children()));
+        assert_eq!(empty, to_vec(b.clean_parents()));
+        assert_eq!(true, a.necessary_count.get() > 0);
+        assert_eq!(false, b.necessary_count.get() > 0);
+
+        b.drain_necessary_children();
+
+        assert_eq!(empty, to_vec(a.necessary_children()));
+        assert_eq!(empty, to_vec(a.clean_parents()));
+        assert_eq!(empty, to_vec(b.necessary_children()));
+        assert_eq!(empty, to_vec(b.clean_parents()));
+        assert_eq!(false, a.necessary_count.get() > 0);
+        assert_eq!(false, b.necessary_count.get() > 0);
+    }
+
+    #[test]
+    fn height_calculated_correctly() {
+        let mut graph = Graph2::new();
+        let a = graph.insert_testing();
+        let b = graph.insert_testing();
+        let c = graph.insert_testing();
+
+        assert_eq!(0, a.height.get());
+        assert_eq!(0, b.height.get());
+        assert_eq!(0, c.height.get());
+
+        assert_eq!(Ok(false), ensure_height_increases(b, c));
+        assert_eq!(Ok(true), ensure_height_increases(b, c));
+        b.add_clean_parent(c);
+
+        assert_eq!(0, a.height.get());
+        assert_eq!(0, b.height.get());
+        assert_eq!(1, c.height.get());
+
+        assert_eq!(Ok(false), ensure_height_increases(a, b));
+        assert_eq!(Ok(true), ensure_height_increases(a, b));
+        a.add_clean_parent(b);
+
+        assert_eq!(0, a.height.get());
+        assert_eq!(1, b.height.get());
+        assert_eq!(2, c.height.get());
+
+        a.drain_clean_parents();
+
+        assert_eq!(0, a.height.get());
+        assert_eq!(1, b.height.get());
+        assert_eq!(2, c.height.get());
+    }
+
+    #[test]
+    fn cycles_cause_error() {
+        let mut graph = Graph2::new();
+        let b = graph.insert_testing();
+        let c = graph.insert_testing();
+        ensure_height_increases(b, c).unwrap();
+        b.add_clean_parent(c);
+        ensure_height_increases(c,b).unwrap_err();
+    }
+
+    #[test]
+    fn non_cycles_wont_cause_errors() {
+        let mut graph = Graph2::new();
+        let a = graph.insert_testing();
+        let b = graph.insert_testing();
+        let c = graph.insert_testing();
+        let d = graph.insert_testing();
+        let e = graph.insert_testing();
+
+        ensure_height_increases(b, c).unwrap();
+        b.add_clean_parent(c);
+        ensure_height_increases(c, e).unwrap();
+        c.add_clean_parent(e);
+        ensure_height_increases(b, d).unwrap();
+        b.add_clean_parent(d);
+        ensure_height_increases(d, e).unwrap();
+        d.add_clean_parent(e);
+        ensure_height_increases(a, b).unwrap();
+        a.add_clean_parent(b);
+    }
 }
