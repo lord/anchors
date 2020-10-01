@@ -5,7 +5,6 @@ mod ext;
 pub use ext::AnchorExt;
 mod constant;
 mod fakeheap;
-mod graph;
 mod nodequeue;
 mod refcounter;
 pub mod singlethread;

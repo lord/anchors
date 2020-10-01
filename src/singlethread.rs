@@ -110,7 +110,7 @@ impl Engine {
     /// Creates a new Engine with a custom maximum height.
     pub fn new_with_max_height(max_height: usize) -> Self {
         let refcounter = RefCounter::new();
-        let graph = Rc::new(Graph2::new());
+        let graph = Rc::new(Graph2::new(max_height));
         let mounter = Mounter {
             refcounter: refcounter.clone(),
             graph: graph.clone(),

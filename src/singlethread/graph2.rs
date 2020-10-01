@@ -12,6 +12,9 @@ use crate::singlethread::NodeNum;
 pub struct Graph2 {
     nodes: Arena<Node>,
     owned_ids: RefCell<SlotMap<NodeNum, *const Node>>,
+
+    /// height -> first node in that height's queue
+    recalc_queues: Vec<Option<*const Node>>,
 }
 
 pub struct Node {
@@ -210,10 +213,11 @@ impl<'a> Drop for RefCellVecIterator<'a> {
 }
 
 impl Graph2 {
-    pub fn new() -> Self {
+    pub fn new(max_height: usize) -> Self {
         Self {
             nodes: Arena::new(),
             owned_ids: RefCell::new(SlotMap::with_key()),
+            recalc_queues: vec![None; max_height],
         }
     }
 
@@ -312,7 +316,7 @@ mod test {
 
     #[test]
     fn set_edge_updates_correctly() {
-        let graph = Graph2::new();
+        let graph = Graph2::new(256);
         let a = graph.insert_testing();
         let b = graph.insert_testing();
         let empty: Vec<NodeGuard<'_>> = vec![];
@@ -366,7 +370,7 @@ mod test {
 
     #[test]
     fn height_calculated_correctly() {
-        let graph = Graph2::new();
+        let graph = Graph2::new(256);
         let a = graph.insert_testing();
         let b = graph.insert_testing();
         let c = graph.insert_testing();
@@ -400,7 +404,7 @@ mod test {
 
     #[test]
     fn cycles_cause_error() {
-        let graph = Graph2::new();
+        let graph = Graph2::new(256);
         let b = graph.insert_testing();
         let c = graph.insert_testing();
         ensure_height_increases(b, c).unwrap();
@@ -410,7 +414,7 @@ mod test {
 
     #[test]
     fn non_cycles_wont_cause_errors() {
-        let graph = Graph2::new();
+        let graph = Graph2::new(256);
         let a = graph.insert_testing();
         let b = graph.insert_testing();
         let c = graph.insert_testing();
