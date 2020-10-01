@@ -520,6 +520,10 @@ mod test {
         set_min_height(d, 4);
         let e = graph.insert_testing();
         set_min_height(e, 1);
+        let e2 = graph.insert_testing();
+        set_min_height(e2, 1);
+        let e3 = graph.insert_testing();
+        set_min_height(e3, 1);
 
         graph.queue_recalc(a);
         graph.queue_recalc(a);
@@ -533,7 +537,11 @@ mod test {
         assert_eq!(Some(d), graph.recalc_pop_next().map(|(_, v)| v));
 
         graph.queue_recalc(e);
+        graph.queue_recalc(e2);
+        graph.queue_recalc(e3);
 
+        assert_eq!(Some(e3), graph.recalc_pop_next().map(|(_, v)| v));
+        assert_eq!(Some(e2), graph.recalc_pop_next().map(|(_, v)| v));
         assert_eq!(Some(e), graph.recalc_pop_next().map(|(_, v)| v));
         assert_eq!(Some(b), graph.recalc_pop_next().map(|(_, v)| v));
 
