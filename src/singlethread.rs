@@ -170,7 +170,6 @@ impl Engine {
         borrow
             .output(&mut EngineContext {
                 engine: &self,
-                node_num: anchor.data.num,
             })
             .downcast_ref::<O>()
             .unwrap()
@@ -274,7 +273,7 @@ impl Engine {
         let this_node_num = node.key.get();
         let mut ecx = EngineContextMut {
             engine: self,
-            node_num: this_node_num,
+            node: node,
             pending_on_anchor_get: false,
         };
         let poll_result = this_anchor.borrow_mut().poll_updated(&mut ecx);
@@ -381,12 +380,11 @@ impl crate::DirtyHandle for DirtyHandle {
 
 struct EngineContext<'eng> {
     engine: &'eng Engine,
-    node_num: NodeNum,
 }
 
 struct EngineContextMut<'eng> {
     engine: &'eng Engine,
-    node_num: NodeNum,
+    node: NodeGuard<'eng>,
     pending_on_anchor_get: bool,
 }
 
@@ -405,7 +403,6 @@ impl<'eng> OutputContext<'eng> for EngineContext<'eng> {
         let output: &O = unsafe_borrow
             .output(&mut EngineContext {
                 engine: self.engine,
-                node_num: anchor.data.num,
             })
             .downcast_ref()
             .unwrap();
@@ -429,7 +426,6 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
         let output: &O = unsafe_borrow
             .output(&mut EngineContext {
                 engine: self.engine,
-                node_num: anchor.data.num,
             })
             .downcast_ref()
             .unwrap();
@@ -441,9 +437,8 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
         anchor: &Anchor<O, Self::Engine>,
         necessary: bool,
     ) -> Poll {
-        let self_node = self.engine.graph.get(self.node_num).unwrap();
         let child = self.engine.graph.get(anchor.data.num).unwrap();
-        let height_already_increased = match graph2::ensure_height_increases(child, self_node) {
+        let height_already_increased = match graph2::ensure_height_increases(child, self.node) {
             Ok(v) => v,
             Err(()) => {
                 panic!("loop detected in anchors!\n");
@@ -451,25 +446,25 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
         };
 
         let self_is_necessary =
-            Engine::check_observed_raw(self.engine.graph.get(self.node_num).unwrap())
+            Engine::check_observed_raw(self.node)
                 != ObservedState::Unnecessary;
 
         if graph2::recalc_state(child) != RecalcState::Ready {
             self.pending_on_anchor_get = true;
             self.engine.graph.queue_recalc(child);
             if necessary && self_is_necessary {
-                self_node.add_necessary_child(child);
+                self.node.add_necessary_child(child);
             }
             Poll::Pending
         } else if !height_already_increased {
             self.pending_on_anchor_get = true;
             Poll::Pending
         } else {
-            child.add_clean_parent(self_node);
+            child.add_clean_parent(self.node);
             if necessary && self_is_necessary {
-                self_node.add_necessary_child(child);
+                self.node.add_necessary_child(child);
             }
-            match (child.last_update.get(), self_node.last_ready.get()) {
+            match (child.last_update.get(), self.node.last_ready.get()) {
                 (Some(a), Some(b)) if a <= b => Poll::Unchanged,
                 _ => Poll::Updated,
             }
@@ -478,15 +473,13 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
 
     fn unrequest<'out, O: 'static>(&mut self, anchor: &Anchor<O, Self::Engine>) {
         let child = self.engine.graph.get(anchor.data.num).unwrap();
-        let self_node = self.engine.graph.get(self.node_num).unwrap();
-
-        self_node.remove_necessary_child(child);
+        self.node.remove_necessary_child(child);
         Engine::update_necessary_children(child);
     }
 
     fn dirty_handle(&mut self) -> DirtyHandle {
         DirtyHandle {
-            num: self.node_num,
+            num: self.node.key.get(),
             dirty_marks: self.engine.dirty_marks.clone(),
         }
     }
