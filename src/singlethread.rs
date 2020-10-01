@@ -66,9 +66,6 @@ pub struct Engine {
     dirty_marks: Rc<RefCell<Vec<NodeNum>>>,
     refcounter: RefCounter<NodeNum>,
 
-    // used internally by mark_dirty. we persist it so we can allocate less
-    queue: Vec<NodeNum>,
-
     // tracks the current stabilization generation; incremented on every stabilize
     generation: Generation,
 }
@@ -118,7 +115,6 @@ impl Engine {
             graph,
             dirty_marks: Default::default(),
             refcounter,
-            queue: vec![],
             generation: Generation::new(),
         }
     }
