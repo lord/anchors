@@ -64,7 +64,7 @@ slotmap::new_key_type! {
 /// The main execution engine of Singlethread.
 pub struct Engine {
     // TODO store Nodes on heap directly?? maybe try for Rc<RefCell<SlotMap>> now
-    graph: Rc<graph::MetadataGraph>,
+    graph: Rc<Graph2>,
     to_recalculate: RefCell<NodeQueue<NodeNum>>,
     dirty_marks: Rc<RefCell<Vec<NodeNum>>>,
     refcounter: RefCounter<NodeNum>,
@@ -77,7 +77,7 @@ pub struct Engine {
 }
 
 struct Mounter {
-    graph: Rc<graph::MetadataGraph>,
+    graph: Rc<Graph2>,
     refcounter: RefCounter<NodeNum>,
 }
 
@@ -92,7 +92,7 @@ impl crate::Engine for Engine {
                 .as_mut()
                 .expect("no engine was initialized. did you call `Engine::new()`?");
             let debug_info = inner.debug_info();
-            let num = this.graph.raw_graph().insert(Rc::new(RefCell::new(inner)), debug_info);
+            let num = this.graph.insert(Rc::new(RefCell::new(inner)), debug_info);
             this.refcounter.create(num);
             Anchor::new(AnchorHandle {
                 num,
@@ -111,7 +111,7 @@ impl Engine {
     /// Creates a new Engine with a custom maximum height.
     pub fn new_with_max_height(max_height: usize) -> Self {
         let refcounter = RefCounter::new();
-        let graph = Rc::new(graph::MetadataGraph::new());
+        let graph = Rc::new(Graph2::new());
         let mounter = Mounter {
             refcounter: refcounter.clone(),
             graph: graph.clone(),
@@ -132,7 +132,7 @@ impl Engine {
     /// often, it's best to mark it as Observed so that Anchors can calculate its
     /// dependencies faster.
     pub fn mark_observed<O: 'static>(&mut self, anchor: &Anchor<O, Engine>) {
-        self.graph.raw_graph().get(anchor.data.num).unwrap().observed.set(true);
+        self.graph.get(anchor.data.num).unwrap().observed.set(true);
         if self.to_recalculate.borrow().state(anchor.data.num) != NodeState::Ready {
             self.mark_node_for_recalculation(anchor.data.num);
         }
@@ -142,7 +142,7 @@ impl Engine {
     /// because `anchor` was previously observed, those parents will be unmarked as
     /// necessary.
     pub fn mark_unobserved<O: 'static>(&mut self, anchor: &Anchor<O, Engine>) {
-        let node = self.graph.raw_graph().get(anchor.data.num).unwrap();
+        let node = self.graph.get(anchor.data.num).unwrap();
         node.observed.set(false);
         Self::update_necessary_children(node);
     }
@@ -164,7 +164,7 @@ impl Engine {
         // stabilize once before, since the stabilization process may mark our requested node
         // as dirty
         self.stabilize();
-        let anchor_node = self.graph.raw_graph().get(anchor.data.num).unwrap();
+        let anchor_node = self.graph.get(anchor.data.num).unwrap();
         if self.to_recalculate.borrow().state(anchor.data.num) != NodeState::Ready {
             self.to_recalculate
             .borrow_mut()
@@ -174,7 +174,7 @@ impl Engine {
             // to make sure we don't unnecessarily increment generation number
             self.stabilize0();
         }
-        let target_anchor = self.graph.raw_graph().get(anchor.data.num).unwrap().anchor.clone();
+        let target_anchor = self.graph.get(anchor.data.num).unwrap().anchor.clone();
         let borrow = target_anchor.borrow();
         borrow
             .output(&mut EngineContext {
@@ -208,7 +208,7 @@ impl Engine {
             borrow.pop_next()
         };
         while let Some((height, this_node_num)) = next.take() {
-            let node = self.graph.raw_graph().get(this_node_num).unwrap();
+            let node = self.graph.get(this_node_num).unwrap();
             let height = node.height.get();
             let calculation_complete = if height == height {
                 // TODO with new graph we can automatically relocate nodes if their height changes
@@ -236,7 +236,7 @@ impl Engine {
     pub fn debug_state(&self) -> String {
         let mut debug = "".to_string();
         // for (node_id, _) in nodes.iter() {
-        //     let node = self.graph.raw_graph().get(node_id).unwrap();
+        //     let node = self.graph.get(node_id).unwrap();
         //     let necessary = if self.graph.is_necessary(node_id) {
         //         "necessary"
         //     } else {
@@ -264,7 +264,7 @@ impl Engine {
     }
 
     pub fn check_observed<T>(&self, anchor: &Anchor<T, Engine>) -> ObservedState {
-        let node = self.graph.raw_graph().get(anchor.data.num).unwrap();
+        let node = self.graph.get(anchor.data.num).unwrap();
         Self::check_observed_raw(node)
     }
 
@@ -289,7 +289,7 @@ impl Engine {
 
     /// returns false if calculation is still pending
     fn recalculate(&mut self, this_node_num: NodeNum) -> bool {
-        let this_anchor = self.graph.raw_graph().get(this_node_num).unwrap().anchor.clone();
+        let this_anchor = self.graph.get(this_node_num).unwrap().anchor.clone();
         let mut ecx = EngineContextMut {
             engine: self,
             node_num: this_node_num,
@@ -313,13 +313,13 @@ impl Engine {
             Poll::Updated => {
                 // make sure all parents are marked as dirty, and observed parents are recalculated
                 self.mark_dirty(this_node_num, true);
-                let node = self.graph.raw_graph().get(this_node_num).unwrap();
+                let node = self.graph.get(this_node_num).unwrap();
                 node.last_update.set(Some(self.generation));
                 node.last_ready.set(Some(self.generation));
                 true
             }
             Poll::Unchanged => {
-                let node = self.graph.raw_graph().get(this_node_num).unwrap();
+                let node = self.graph.get(this_node_num).unwrap();
                 node.last_ready.set(Some(self.generation));
                 true
             },
@@ -329,8 +329,7 @@ impl Engine {
     // skip_self = true indicates output has *definitely* changed, but node has been recalculated
     // skip_self = false indicates node has not yet been recalculated
     fn mark_dirty(&mut self, node_id: NodeNum, skip_self: bool) {
-        let graph = self.graph.raw_graph();
-        let node = graph.get(node_id).unwrap();
+        let node = self.graph.get(node_id).unwrap();
         if skip_self {
             let parents = node.drain_clean_parents();
             for parent in parents {
@@ -358,7 +357,7 @@ impl Engine {
     }
 
     fn mark_node_for_recalculation(&self, node_id: NodeNum) {
-        let node = self.graph.raw_graph().get(node_id).unwrap();
+        let node = self.graph.get(node_id).unwrap();
         self.to_recalculate.borrow_mut().queue_recalc(node.height.get(), node_id);
     }
 }
@@ -426,7 +425,7 @@ impl<'eng> OutputContext<'eng> for EngineContext<'eng> {
         {
             panic!("attempted to get node that was not previously requested")
         }
-        let node = self.engine.graph.raw_graph().get(anchor.data.num).unwrap();
+        let node = self.engine.graph.get(anchor.data.num).unwrap();
         let unsafe_borrow = unsafe { node.anchor.as_ptr().as_ref().unwrap() };
         let output: &O = unsafe_borrow
             .output(&mut EngineContext {
@@ -451,7 +450,7 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
             panic!("attempted to get node that was not previously requested")
         }
 
-        let node = self.engine.graph.raw_graph().get(anchor.data.num).unwrap();
+        let node = self.engine.graph.get(anchor.data.num).unwrap();
         let unsafe_borrow = unsafe { node.anchor.as_ptr().as_ref().unwrap() };
         let output: &O = unsafe_borrow
             .output(&mut EngineContext {
@@ -468,8 +467,8 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
         anchor: &Anchor<O, Self::Engine>,
         necessary: bool,
     ) -> Poll {
-        let self_node = self.engine.graph.raw_graph().get(self.node_num).unwrap();
-        let child = self.engine.graph.raw_graph().get(anchor.data.num).unwrap();
+        let self_node = self.engine.graph.get(self.node_num).unwrap();
+        let child = self.engine.graph.get(anchor.data.num).unwrap();
         let height_already_increased = match graph2::ensure_height_increases(child, self_node) {
             Ok(v) => v,
             Err(()) => {
@@ -478,7 +477,7 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
         };
 
         let self_is_necessary =
-            Engine::check_observed_raw(self.engine.graph.raw_graph().get(self.node_num).unwrap()) != ObservedState::Unnecessary;
+            Engine::check_observed_raw(self.engine.graph.get(self.node_num).unwrap()) != ObservedState::Unnecessary;
 
         if self.engine.to_recalculate.borrow().state(anchor.data.num) != NodeState::Ready {
             self.pending_on_anchor_get = true;
@@ -503,8 +502,8 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
     }
 
     fn unrequest<'out, O: 'static>(&mut self, anchor: &Anchor<O, Self::Engine>) {
-        let child = self.engine.graph.raw_graph().get(anchor.data.num).unwrap();
-        let self_node = self.engine.graph.raw_graph().get(self.node_num).unwrap();
+        let child = self.engine.graph.get(anchor.data.num).unwrap();
+        let self_node = self.engine.graph.get(self.node_num).unwrap();
 
         self_node.remove_necessary_child(child);
         Engine::update_necessary_children(child);
