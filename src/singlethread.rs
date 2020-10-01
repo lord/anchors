@@ -294,13 +294,11 @@ impl Engine {
             Poll::Updated => {
                 // make sure all parents are marked as dirty, and observed parents are recalculated
                 self.mark_dirty(node, true);
-                let node = self.graph.get(this_node_num).unwrap();
                 node.last_update.set(Some(self.generation));
                 node.last_ready.set(Some(self.generation));
                 true
             }
             Poll::Unchanged => {
-                let node = self.graph.get(this_node_num).unwrap();
                 node.last_ready.set(Some(self.generation));
                 true
             }
