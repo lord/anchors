@@ -11,7 +11,7 @@ use crate::singlethread::NodeNum;
 
 pub struct Graph2 {
     nodes: Arena<Node>,
-    mapping: RefCell<SlotMap<NodeNum, *const Node>>,
+    owned_ids: RefCell<SlotMap<NodeNum, *const Node>>,
 }
 
 pub struct Node {
@@ -191,7 +191,7 @@ impl Graph2 {
     pub fn new() -> Self {
         Self {
             nodes: Arena::new(),
-            mapping: RefCell::new(SlotMap::with_key()),
+            owned_ids: RefCell::new(SlotMap::with_key()),
         }
     }
 
@@ -205,7 +205,7 @@ impl Graph2 {
     }
 
     pub (super) fn insert<'a>(&'a self, mut anchor: Rc<RefCell<dyn GenericAnchor>>, debug_info: AnchorDebugInfo) -> NodeNum {
-        self.mapping.borrow_mut().insert_with_key(|key| {
+        self.owned_ids.borrow_mut().insert_with_key(|key| {
             let mut node = Node {
                 observed: Cell::new(false),
                 valid: Cell::new(false),
@@ -227,7 +227,7 @@ impl Graph2 {
     }
 
     pub fn get<'a>(&'a self, key: NodeNum) -> Option<NodeGuard<'a>> {
-        self.mapping.borrow().get(key).map(|ptr| NodeGuard {inside: unsafe {&**ptr}, f: PhantomData})
+        self.owned_ids.borrow().get(key).map(|ptr| NodeGuard {inside: unsafe {&**ptr}, f: PhantomData})
     }
 }
 
@@ -309,7 +309,7 @@ mod test {
         assert_eq!(true, a.necessary_count.get() > 0);
         assert_eq!(false, b.necessary_count.get() > 0);
 
-        a.drain_clean_parents();
+        let _ = a.drain_clean_parents();
 
         assert_eq!(empty, to_vec(a.necessary_children()));
         assert_eq!(empty, to_vec(a.clean_parents()));
@@ -318,7 +318,7 @@ mod test {
         assert_eq!(true, a.necessary_count.get() > 0);
         assert_eq!(false, b.necessary_count.get() > 0);
 
-        b.drain_necessary_children();
+        let _ = b.drain_necessary_children();
 
         assert_eq!(empty, to_vec(a.necessary_children()));
         assert_eq!(empty, to_vec(a.clean_parents()));
@@ -355,7 +355,7 @@ mod test {
         assert_eq!(1, b.height.get());
         assert_eq!(2, c.height.get());
 
-        a.drain_clean_parents();
+        let _ = a.drain_clean_parents();
 
         assert_eq!(0, a.height.get());
         assert_eq!(1, b.height.get());
