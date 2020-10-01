@@ -24,8 +24,6 @@ pub struct Node {
     /// number of nodes that list this node as a necessary child
     pub necessary_count: Cell<usize>,
 
-    pub height: Cell<usize>,
-
     pub key: Cell<NodeNum>,
 
     pub(super) debug_info: Cell<AnchorDebugInfo>,
@@ -39,12 +37,17 @@ pub struct Node {
 
     pub ptrs: NodePtrs,
 }
+
 #[derive(Default)]
 pub struct NodePtrs {
+    /// first parent, remaining parents. unsorted, duplicates may exist
     clean_parent0: Cell<Option<*const Node>>,
     clean_parents: RefCell<Vec<*const Node>>,
+
     /// sorted in pointer order
     necessary_children: RefCell<Vec<*const Node>>,
+
+    height: Cell<usize>,
 }
 
 #[derive(Clone, Copy)]
@@ -239,7 +242,6 @@ impl Graph2 {
                 valid: Cell::new(false),
                 visited: Cell::new(false),
                 necessary_count: Cell::new(0),
-                height: Cell::new(0),
                 key: Cell::new(key),
                 ptrs: NodePtrs::default(),
                 debug_info: Cell::new(debug_info),
@@ -266,11 +268,11 @@ pub fn ensure_height_increases<'a>(
     child: NodeGuard<'a>,
     parent: NodeGuard<'a>,
 ) -> Result<bool, ()> {
-    if child.height.get() < parent.height.get() {
+    if height(child) < height(parent) {
         return Ok(true);
     }
     child.visited.set(true);
-    let res = set_min_height(parent, child.height.get() + 1);
+    let res = set_min_height(parent, height(child) + 1);
     child.visited.set(false);
     res.map(|()| false)
 }
@@ -280,8 +282,8 @@ fn set_min_height<'a>(node: NodeGuard<'a>, min_height: usize) -> Result<(), ()> 
         return Err(());
     }
     node.visited.set(true);
-    if node.height.get() < min_height {
-        node.height.set(min_height);
+    if height(node) < min_height {
+        node.ptrs.height.set(min_height);
         let mut did_err = false;
         for parent in node.clean_parents() {
             if let Err(_loop_ids) = set_min_height(parent, min_height + 1) {
@@ -294,6 +296,10 @@ fn set_min_height<'a>(node: NodeGuard<'a>, min_height: usize) -> Result<(), ()> 
     }
     node.visited.set(false);
     Ok(())
+}
+
+pub fn height<'a>(node: NodeGuard<'a>) -> usize {
+    node.ptrs.height.get()
 }
 
 #[cfg(test)]
@@ -365,31 +371,31 @@ mod test {
         let b = graph.insert_testing();
         let c = graph.insert_testing();
 
-        assert_eq!(0, a.height.get());
-        assert_eq!(0, b.height.get());
-        assert_eq!(0, c.height.get());
+        assert_eq!(0, height(a));
+        assert_eq!(0, height(b));
+        assert_eq!(0, height(c));
 
         assert_eq!(Ok(false), ensure_height_increases(b, c));
         assert_eq!(Ok(true), ensure_height_increases(b, c));
         b.add_clean_parent(c);
 
-        assert_eq!(0, a.height.get());
-        assert_eq!(0, b.height.get());
-        assert_eq!(1, c.height.get());
+        assert_eq!(0, height(a));
+        assert_eq!(0, height(b));
+        assert_eq!(1, height(c));
 
         assert_eq!(Ok(false), ensure_height_increases(a, b));
         assert_eq!(Ok(true), ensure_height_increases(a, b));
         a.add_clean_parent(b);
 
-        assert_eq!(0, a.height.get());
-        assert_eq!(1, b.height.get());
-        assert_eq!(2, c.height.get());
+        assert_eq!(0, height(a));
+        assert_eq!(1, height(b));
+        assert_eq!(2, height(c));
 
         let _ = a.drain_clean_parents();
 
-        assert_eq!(0, a.height.get());
-        assert_eq!(1, b.height.get());
-        assert_eq!(2, c.height.get());
+        assert_eq!(0, height(a));
+        assert_eq!(1, height(b));
+        assert_eq!(2, height(c));
     }
 
     #[test]

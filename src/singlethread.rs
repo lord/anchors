@@ -167,7 +167,7 @@ impl Engine {
         if self.to_recalculate.borrow().state(anchor.data.num) != NodeState::Ready {
             self.to_recalculate
                 .borrow_mut()
-                .queue_recalc(anchor_node.height.get(), anchor.data.num);
+                .queue_recalc(graph2::height(anchor_node), anchor.data.num);
             // stabilize again, to make sure our target node that is now in the queue is up-to-date
             // use stabilize0 because no dirty marks have occured since last stabilization, and we want
             // to make sure we don't unnecessarily increment generation number
@@ -208,7 +208,7 @@ impl Engine {
         };
         while let Some((_height, this_node_num)) = next.take() {
             let node = self.graph.get(this_node_num).unwrap();
-            let height = node.height.get();
+            let height = graph2::height(node);
             let calculation_complete = if height == height {
                 // TODO with new graph we can automatically relocate nodes if their height changes
                 // this nodes height is current, so we can recalculate
@@ -360,7 +360,7 @@ impl Engine {
         let node = self.graph.get(node_id).unwrap();
         self.to_recalculate
             .borrow_mut()
-            .queue_recalc(node.height.get(), node_id);
+            .queue_recalc(graph2::height(node), node_id);
     }
 }
 
