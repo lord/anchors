@@ -484,10 +484,7 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
             self.pending_on_anchor_get = true;
             self.engine.mark_node_for_recalculation(anchor.data.num);
             if necessary && self_is_necessary {
-                self.engine.graph.set_edge_necessary(
-                    anchor.data.num,
-                    self.node_num,
-                );
+                self_node.add_necessary_child(child);
             }
             Poll::Pending
         } else if !height_already_increased {
@@ -499,10 +496,7 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
                 self.node_num,
             );
             if necessary && self_is_necessary {
-                self.engine.graph.set_edge_necessary(
-                    anchor.data.num,
-                    self.node_num,
-                );
+                self_node.add_necessary_child(child);
             }
             match (child.last_update.get(), self_node.last_ready.get()) {
                 (Some(a), Some(b)) if a <= b =>  Poll::Unchanged,

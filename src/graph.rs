@@ -23,12 +23,6 @@ impl MetadataGraph {
         let child = self.graph.get(child).unwrap();
         child.add_clean_parent(parent);
     }
-
-    pub fn set_edge_necessary(&self, child: NodeNum, parent: NodeNum) {
-        let parent = self.graph.get(parent).unwrap();
-        let child = self.graph.get(child).unwrap();
-        parent.add_necessary_child(child);
-    }
 }
 
 fn set_min_height0<'a>(node: NodeGuard<'a>, min_height: usize) -> Result<(), ()> {
