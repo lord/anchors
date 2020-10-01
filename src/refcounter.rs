@@ -1,22 +1,21 @@
-use slotmap::Key;
 use std::cell::RefCell;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::rc::Rc;
 
 #[derive(Clone, Debug)]
-pub struct RefCounter<T: Hash + Eq + Debug + Key> {
+pub struct RefCounter<T: Hash + Eq + Debug> {
     inner: Rc<RefCell<RefCounterState<T>>>,
 }
 
 #[derive(Clone, Debug)]
-struct RefCounterState<T: Hash + Eq + Debug + Key> {
+struct RefCounterState<T: Hash + Eq + Debug> {
     // counts: SecondaryMap<T, usize>,
     // deleted: Vec<T>,
     f: std::marker::PhantomData<T>,
 }
 
-impl<T: Hash + Eq + Debug + Key> RefCounter<T> {
+impl<T: Hash + Eq + Debug> RefCounter<T> {
     pub fn new() -> Self {
         Self {
             inner: Rc::new(RefCell::new(RefCounterState {

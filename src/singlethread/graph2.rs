@@ -3,11 +3,8 @@ use std::cell::{Cell, RefCell, RefMut};
 use std::rc::Rc;
 use typed_arena::Arena;
 
-use slotmap::SlotMap;
 use std::iter::Iterator;
 use std::marker::PhantomData;
-
-use crate::singlethread::NodeNum;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum RecalcState {
@@ -22,9 +19,13 @@ impl Default for RecalcState {
     }
 }
 
+thread_local! {
+    pub static NEXT_TOKEN: Cell<u32> = Cell::new(0);
+}
+
 pub struct Graph2 {
     nodes: Arena<Node>,
-    owned_ids: RefCell<SlotMap<NodeNum, *const Node>>,
+    token: u32,
 
     /// height -> first node in that height's queue
     recalc_queues: RefCell<Vec<Option<*const Node>>>,
@@ -42,7 +43,7 @@ pub struct Node {
     /// number of nodes that list this node as a necessary child
     pub necessary_count: Cell<usize>,
 
-    pub key: Cell<NodeNum>,
+    pub token: u32,
 
     pub(super) debug_info: Cell<AnchorDebugInfo>,
 
@@ -55,6 +56,19 @@ pub struct Node {
 
     pub ptrs: NodePtrs,
 }
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+pub struct NodeKey {
+    ptr: *const Node,
+    token: u32,
+}
+
+impl !Send for NodeKey{}
+impl !Sync for NodeKey{}
+impl !Send for NodeGuard<'_>{}
+impl !Sync for NodeGuard<'_>{}
+impl !Send for Graph2{}
+impl !Sync for Graph2{}
 
 #[derive(Default)]
 pub struct NodePtrs {
@@ -85,7 +99,7 @@ use std::fmt;
 impl fmt::Debug for NodeGuard<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("NodeGuard")
-            .field("inside.key", &self.inside.key.get())
+            .field("inside.key", &self.key())
             .finish()
     }
 }
@@ -104,6 +118,13 @@ impl<'a> std::ops::Deref for NodeGuard<'a> {
 }
 
 impl<'a> NodeGuard<'a> {
+    pub fn key(self) -> NodeKey {
+        NodeKey {
+            ptr: self.inside as *const Node,
+            token: self.token,
+        }
+    }
+
     pub fn add_clean_parent(self, parent: NodeGuard<'a>) {
         if self.inside.ptrs.clean_parent0.get().is_none() {
             self.inside
@@ -237,7 +258,11 @@ impl Graph2 {
     pub fn new(max_height: usize) -> Self {
         Self {
             nodes: Arena::new(),
-            owned_ids: RefCell::new(SlotMap::with_key()),
+            token: NEXT_TOKEN.with(|token| {
+                let n = token.get();
+                token.set(n + 1);
+                n
+            }),
             recalc_queues: RefCell::new(vec![None; max_height]),
             recalc_min_height: Cell::new(max_height),
             recalc_max_height: Cell::new(0),
@@ -262,30 +287,35 @@ impl Graph2 {
         &'a self,
         anchor: Rc<RefCell<dyn GenericAnchor>>,
         debug_info: AnchorDebugInfo,
-    ) -> NodeNum {
-        self.owned_ids.borrow_mut().insert_with_key(|key| {
-            let mut node = Node {
-                observed: Cell::new(false),
-                valid: Cell::new(false),
-                visited: Cell::new(false),
-                necessary_count: Cell::new(0),
-                key: Cell::new(key),
-                ptrs: NodePtrs::default(),
-                debug_info: Cell::new(debug_info),
-                last_ready: Cell::new(None),
-                last_update: Cell::new(None),
-                anchor,
-            };
-            // SAFETY: ensure ptrs struct is empty on insert
-            // TODO this probably is not actually necessary if there's no way to take a Node out of the graph
-            node.ptrs = NodePtrs::default();
-            self.nodes.alloc(node)
-        })
+    ) -> NodeKey {
+        let mut node = Node {
+            observed: Cell::new(false),
+            valid: Cell::new(false),
+            visited: Cell::new(false),
+            necessary_count: Cell::new(0),
+            token: self.token,
+            ptrs: NodePtrs::default(),
+            debug_info: Cell::new(debug_info),
+            last_ready: Cell::new(None),
+            last_update: Cell::new(None),
+            anchor,
+        };
+        // SAFETY: ensure ptrs struct is empty on insert
+        // TODO this probably is not actually necessary if there's no way to take a Node out of the graph
+        node.ptrs = NodePtrs::default();
+        let ptr = self.nodes.alloc(node);
+        NodeKey {
+            ptr: ptr as *const Node,
+            token: self.token,
+        }
     }
 
-    pub fn get<'a>(&'a self, key: NodeNum) -> Option<NodeGuard<'a>> {
-        self.owned_ids.borrow().get(key).map(|ptr| NodeGuard {
-            inside: unsafe { &**ptr },
+    pub fn get<'a>(&'a self, key: NodeKey) -> Option<NodeGuard<'a>> {
+        if key.token != self.token {
+            return None;
+        }
+        Some(NodeGuard {
+            inside: unsafe { &*key.ptr },
             f: PhantomData,
         })
     }

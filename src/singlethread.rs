@@ -8,7 +8,7 @@
 
 pub mod graph2;
 
-use graph2::{Graph2, NodeGuard, RecalcState};
+use graph2::{Graph2, NodeGuard, RecalcState, NodeKey};
 
 use crate::refcounter::RefCounter;
 use crate::{Anchor, AnchorInner, OutputContext, Poll, UpdateContext};
@@ -54,17 +54,12 @@ pub enum ObservedState {
     Unnecessary,
 }
 
-slotmap::new_key_type! {
-    /// The AnchorHandle token of the Singlethread engine.
-    pub struct NodeNum;
-}
-
 /// The main execution engine of Singlethread.
 pub struct Engine {
     // TODO store Nodes on heap directly?? maybe try for Rc<RefCell<SlotMap>> now
     graph: Rc<Graph2>,
-    dirty_marks: Rc<RefCell<Vec<NodeNum>>>,
-    refcounter: RefCounter<NodeNum>,
+    dirty_marks: Rc<RefCell<Vec<NodeKey>>>,
+    refcounter: RefCounter<NodeKey>,
 
     // tracks the current stabilization generation; incremented on every stabilize
     generation: Generation,
@@ -72,7 +67,7 @@ pub struct Engine {
 
 struct Mounter {
     graph: Rc<Graph2>,
-    refcounter: RefCounter<NodeNum>,
+    refcounter: RefCounter<NodeKey>,
 }
 
 impl crate::Engine for Engine {
@@ -270,7 +265,6 @@ impl Engine {
     /// returns false if calculation is still pending
     fn recalculate<'a>(&'a self, node: NodeGuard<'a>) -> bool {
         let this_anchor = node.anchor.clone();
-        let this_node_num = node.key.get();
         let mut ecx = EngineContextMut {
             engine: self,
             node: node,
@@ -312,7 +306,7 @@ impl Engine {
             let parents = node.drain_clean_parents();
             for parent in parents {
                 // TODO still calling dirty twice on observed relationships
-                parent.anchor.borrow_mut().dirty(&node.key.get());
+                parent.anchor.borrow_mut().dirty(&node.key());
                 self.mark_dirty0(parent);
             }
         } else {
@@ -321,7 +315,7 @@ impl Engine {
     }
 
     fn mark_dirty0<'a>(&'a self, next: NodeGuard<'a>) {
-        let id = next.key.get();
+        let id = next.key();
         if Self::check_observed_raw(next) != ObservedState::Unnecessary {
             self.graph.queue_recalc(next);
         } else if graph2::recalc_state(next) == RecalcState::Ready {
@@ -338,8 +332,8 @@ impl Engine {
 /// Singlethread's implementation of Anchors' `AnchorHandle`, the engine-specific handle that sits inside an `Anchor`.
 #[derive(Debug)]
 pub struct AnchorHandle {
-    num: NodeNum,
-    refcounter: RefCounter<NodeNum>,
+    num: NodeKey,
+    refcounter: RefCounter<NodeKey>,
 }
 
 impl Clone for AnchorHandle {
@@ -358,8 +352,8 @@ impl Drop for AnchorHandle {
     }
 }
 impl crate::AnchorHandle for AnchorHandle {
-    type Token = NodeNum;
-    fn token(&self) -> NodeNum {
+    type Token = NodeKey;
+    fn token(&self) -> NodeKey {
         self.num
     }
 }
@@ -367,8 +361,8 @@ impl crate::AnchorHandle for AnchorHandle {
 /// Singlethread's implementation of Anchors' `DirtyHandle`, which allows a node with non-Anchors inputs to manually mark itself as dirty.
 #[derive(Debug, Clone)]
 pub struct DirtyHandle {
-    num: NodeNum,
-    dirty_marks: Rc<RefCell<Vec<NodeNum>>>,
+    num: NodeKey,
+    dirty_marks: Rc<RefCell<Vec<NodeKey>>>,
 }
 impl crate::DirtyHandle for DirtyHandle {
     fn mark_dirty(&self) {
@@ -477,14 +471,14 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
 
     fn dirty_handle(&mut self) -> DirtyHandle {
         DirtyHandle {
-            num: self.node.key.get(),
+            num: self.node.key(),
             dirty_marks: self.engine.dirty_marks.clone(),
         }
     }
 }
 
 trait GenericAnchor {
-    fn dirty(&mut self, child: &NodeNum);
+    fn dirty(&mut self, child: &NodeKey);
     fn poll_updated<'eng>(&mut self, ctx: &mut EngineContextMut<'eng>) -> Poll;
     fn output<'slf, 'out>(&'slf self, ctx: &mut EngineContext<'out>) -> &'out dyn Any
     where
@@ -492,7 +486,7 @@ trait GenericAnchor {
     fn debug_info(&self) -> AnchorDebugInfo;
 }
 impl<I: AnchorInner<Engine> + 'static> GenericAnchor for I {
-    fn dirty(&mut self, child: &NodeNum) {
+    fn dirty(&mut self, child: &NodeKey) {
         AnchorInner::dirty(self, child)
     }
     fn poll_updated<'eng>(&mut self, ctx: &mut EngineContextMut<'eng>) -> Poll {

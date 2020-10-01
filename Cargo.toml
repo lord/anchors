@@ -12,7 +12,6 @@ repository = "https://github.com/lord/anchors"
 bench = false
 
 [dependencies]
-slotmap = { version = "0.4.0", features = ["unstable"] }
 typed-arena = { version = "2.0.1" }
 
 [dev-dependencies]

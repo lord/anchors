@@ -1,3 +1,5 @@
+#![feature(negative_impls)]
+
 use std::marker::PhantomData;
 use std::panic::Location;
 
