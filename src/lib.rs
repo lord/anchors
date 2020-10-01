@@ -293,7 +293,6 @@ mod test {
     #[test]
     fn test_observed_marking() {
         use crate::singlethread::ObservedState;
-        
 
         let mut engine = crate::singlethread::Engine::new();
         let (v1, _v1_setter) = crate::var::Var::new(1usize);
@@ -303,79 +302,31 @@ mod test {
         engine.mark_observed(&a);
         engine.mark_observed(&c);
 
-        assert_eq!(
-            ObservedState::Unnecessary,
-            engine.check_observed(&v1)
-        );
-        assert_eq!(
-            ObservedState::Observed,
-            engine.check_observed(&a)
-        );
-        assert_eq!(
-            ObservedState::Unnecessary,
-            engine.check_observed(&b)
-        );
-        assert_eq!(
-            ObservedState::Observed,
-            engine.check_observed(&c)
-        );
+        assert_eq!(ObservedState::Unnecessary, engine.check_observed(&v1));
+        assert_eq!(ObservedState::Observed, engine.check_observed(&a));
+        assert_eq!(ObservedState::Unnecessary, engine.check_observed(&b));
+        assert_eq!(ObservedState::Observed, engine.check_observed(&c));
 
         engine.stabilize();
 
-        assert_eq!(
-            ObservedState::Necessary,
-            engine.check_observed(&v1)
-        );
-        assert_eq!(
-            ObservedState::Observed,
-            engine.check_observed(&a)
-        );
-        assert_eq!(
-            ObservedState::Necessary,
-            engine.check_observed(&b)
-        );
-        assert_eq!(
-            ObservedState::Observed,
-            engine.check_observed(&c)
-        );
+        assert_eq!(ObservedState::Necessary, engine.check_observed(&v1));
+        assert_eq!(ObservedState::Observed, engine.check_observed(&a));
+        assert_eq!(ObservedState::Necessary, engine.check_observed(&b));
+        assert_eq!(ObservedState::Observed, engine.check_observed(&c));
 
         engine.mark_unobserved(&c);
 
-        assert_eq!(
-            ObservedState::Necessary,
-            engine.check_observed(&v1)
-        );
-        assert_eq!(
-            ObservedState::Observed,
-            engine.check_observed(&a)
-        );
-        assert_eq!(
-            ObservedState::Unnecessary,
-            engine.check_observed(&b)
-        );
-        assert_eq!(
-            ObservedState::Unnecessary,
-            engine.check_observed(&c)
-        );
+        assert_eq!(ObservedState::Necessary, engine.check_observed(&v1));
+        assert_eq!(ObservedState::Observed, engine.check_observed(&a));
+        assert_eq!(ObservedState::Unnecessary, engine.check_observed(&b));
+        assert_eq!(ObservedState::Unnecessary, engine.check_observed(&c));
 
         engine.mark_unobserved(&a);
 
-        assert_eq!(
-            ObservedState::Unnecessary,
-            engine.check_observed(&v1)
-        );
-        assert_eq!(
-            ObservedState::Unnecessary,
-            engine.check_observed(&a)
-        );
-        assert_eq!(
-            ObservedState::Unnecessary,
-            engine.check_observed(&b)
-        );
-        assert_eq!(
-            ObservedState::Unnecessary,
-            engine.check_observed(&c)
-        );
+        assert_eq!(ObservedState::Unnecessary, engine.check_observed(&v1));
+        assert_eq!(ObservedState::Unnecessary, engine.check_observed(&a));
+        assert_eq!(ObservedState::Unnecessary, engine.check_observed(&b));
+        assert_eq!(ObservedState::Unnecessary, engine.check_observed(&c));
     }
 
     #[test]

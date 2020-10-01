@@ -1,11 +1,11 @@
-use typed_arena::Arena;
-use std::rc::Rc;
+use super::{AnchorDebugInfo, Generation, GenericAnchor};
 use std::cell::{Cell, RefCell, RefMut};
-use super::{GenericAnchor, AnchorDebugInfo, Generation};
+use std::rc::Rc;
+use typed_arena::Arena;
 
-use std::marker::PhantomData;
-use slotmap::{SlotMap};
+use slotmap::SlotMap;
 use std::iter::Iterator;
+use std::marker::PhantomData;
 
 use crate::singlethread::NodeNum;
 
@@ -28,14 +28,14 @@ pub struct Node {
 
     pub key: Cell<NodeNum>,
 
-    pub (super) debug_info: Cell<AnchorDebugInfo>,
+    pub(super) debug_info: Cell<AnchorDebugInfo>,
 
     /// tracks the generation when this Node last polled as Updated or Unchanged
-    pub (super) last_ready: Cell<Option<Generation>>,
+    pub(super) last_ready: Cell<Option<Generation>>,
     /// tracks the generation when this Node last polled as Updated
-    pub (super) last_update: Cell<Option<Generation>>,
+    pub(super) last_update: Cell<Option<Generation>>,
 
-    pub (super) anchor: Rc<RefCell<dyn GenericAnchor>>,
+    pub(super) anchor: Rc<RefCell<dyn GenericAnchor>>,
 
     pub ptrs: NodePtrs,
 }
@@ -58,8 +58,8 @@ use std::fmt;
 impl fmt::Debug for NodeGuard<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("NodeGuard")
-        .field("inside.key", &self.inside.key.get())
-        .finish()
+            .field("inside.key", &self.inside.key.get())
+            .finish()
     }
 }
 
@@ -69,23 +69,30 @@ impl PartialEq for NodeGuard<'_> {
     }
 }
 
-impl <'a> std::ops::Deref for NodeGuard<'a> {
+impl<'a> std::ops::Deref for NodeGuard<'a> {
     type Target = Node;
     fn deref(&self) -> &Node {
         &self.inside
     }
 }
 
-impl <'a> NodeGuard<'a> {
+impl<'a> NodeGuard<'a> {
     pub fn add_clean_parent(self, parent: NodeGuard<'a>) {
         if self.inside.ptrs.clean_parent0.get().is_none() {
-            self.inside.ptrs.clean_parent0.set(Some(parent.inside as *const Node))
+            self.inside
+                .ptrs
+                .clean_parent0
+                .set(Some(parent.inside as *const Node))
         } else {
-            self.inside.ptrs.clean_parents.borrow_mut().push(parent.inside)
+            self.inside
+                .ptrs
+                .clean_parents
+                .borrow_mut()
+                .push(parent.inside)
         }
     }
 
-    pub fn clean_parents(self) -> impl Iterator<Item=NodeGuard<'a>> {
+    pub fn clean_parents(self) -> impl Iterator<Item = NodeGuard<'a>> {
         RefCellVecIterator {
             inside: self.inside.ptrs.clean_parents.borrow_mut(),
             next_i: 0,
@@ -95,7 +102,7 @@ impl <'a> NodeGuard<'a> {
         }
     }
 
-    pub fn drain_clean_parents(self) -> impl Iterator<Item=NodeGuard<'a>> {
+    pub fn drain_clean_parents(self) -> impl Iterator<Item = NodeGuard<'a>> {
         RefCellVecIterator {
             inside: self.inside.ptrs.clean_parents.borrow_mut(),
             next_i: 0,
@@ -109,7 +116,10 @@ impl <'a> NodeGuard<'a> {
         let mut necessary_children = self.inside.ptrs.necessary_children.borrow_mut();
         if let Err(i) = necessary_children.binary_search(&(child.inside as *const Node)) {
             necessary_children.insert(i, child.inside as *const Node);
-            child.inside.necessary_count.set(child.inside.necessary_count.get() + 1)
+            child
+                .inside
+                .necessary_count
+                .set(child.inside.necessary_count.get() + 1)
         }
     }
 
@@ -117,11 +127,14 @@ impl <'a> NodeGuard<'a> {
         let mut necessary_children = self.inside.ptrs.necessary_children.borrow_mut();
         if let Ok(i) = necessary_children.binary_search(&(child.inside as *const Node)) {
             necessary_children.remove(i);
-            child.inside.necessary_count.set(child.inside.necessary_count.get() - 1)
+            child
+                .inside
+                .necessary_count
+                .set(child.inside.necessary_count.get() - 1)
         }
     }
 
-    pub fn necessary_children(self) -> impl Iterator<Item=NodeGuard<'a>> {
+    pub fn necessary_children(self) -> impl Iterator<Item = NodeGuard<'a>> {
         RefCellVecIterator {
             inside: self.inside.ptrs.necessary_children.borrow_mut(),
             next_i: 0,
@@ -131,10 +144,10 @@ impl <'a> NodeGuard<'a> {
         }
     }
 
-    pub fn drain_necessary_children(self) -> impl Iterator<Item=NodeGuard<'a>> {
+    pub fn drain_necessary_children(self) -> impl Iterator<Item = NodeGuard<'a>> {
         let necessary_children = self.inside.ptrs.necessary_children.borrow_mut();
         for child in &*necessary_children {
-            let count = &unsafe {&**child}.necessary_count;
+            let count = &unsafe { &**child }.necessary_count;
             count.set(count.get() - 1);
         }
         RefCellVecIterator {
@@ -156,16 +169,22 @@ struct RefCellVecIterator<'a> {
     empty_on_drop: bool,
 }
 
-impl <'a> Iterator for RefCellVecIterator<'a> {
+impl<'a> Iterator for RefCellVecIterator<'a> {
     type Item = NodeGuard<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(first) = self.first.take() {
-            return Some(NodeGuard {inside: unsafe{&*first},  f: self.f});
+            return Some(NodeGuard {
+                inside: unsafe { &*first },
+                f: self.f,
+            });
         }
         let next = self.inside.get(self.next_i)?;
         self.next_i += 1;
-        Some(NodeGuard {inside: unsafe{&**next},  f: self.f})
+        Some(NodeGuard {
+            inside: unsafe { &**next },
+            f: self.f,
+        })
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -179,7 +198,7 @@ impl <'a> Iterator for RefCellVecIterator<'a> {
     }
 }
 
-impl <'a> Drop for RefCellVecIterator<'a> {
+impl<'a> Drop for RefCellVecIterator<'a> {
     fn drop(&mut self) {
         if self.empty_on_drop {
             self.inside.clear()
@@ -197,14 +216,23 @@ impl Graph2 {
 
     #[cfg(test)]
     pub fn insert_testing<'a>(&'a self) -> NodeGuard<'a> {
-        let key = self.insert(Rc::new(RefCell::new(crate::constant::Constant::new_raw_testing(123))), AnchorDebugInfo {
-            location: None,
-            type_info: "testing dummy anchor",
-        });
+        let key = self.insert(
+            Rc::new(RefCell::new(crate::constant::Constant::new_raw_testing(
+                123,
+            ))),
+            AnchorDebugInfo {
+                location: None,
+                type_info: "testing dummy anchor",
+            },
+        );
         self.get(key).unwrap()
     }
 
-    pub (super) fn insert<'a>(&'a self, anchor: Rc<RefCell<dyn GenericAnchor>>, debug_info: AnchorDebugInfo) -> NodeNum {
+    pub(super) fn insert<'a>(
+        &'a self,
+        anchor: Rc<RefCell<dyn GenericAnchor>>,
+        debug_info: AnchorDebugInfo,
+    ) -> NodeNum {
         self.owned_ids.borrow_mut().insert_with_key(|key| {
             let mut node = Node {
                 observed: Cell::new(false),
@@ -227,11 +255,17 @@ impl Graph2 {
     }
 
     pub fn get<'a>(&'a self, key: NodeNum) -> Option<NodeGuard<'a>> {
-        self.owned_ids.borrow().get(key).map(|ptr| NodeGuard {inside: unsafe {&**ptr}, f: PhantomData})
+        self.owned_ids.borrow().get(key).map(|ptr| NodeGuard {
+            inside: unsafe { &**ptr },
+            f: PhantomData,
+        })
     }
 }
 
-pub fn ensure_height_increases<'a>(child: NodeGuard<'a>, parent: NodeGuard<'a>) -> Result<bool, ()> {
+pub fn ensure_height_increases<'a>(
+    child: NodeGuard<'a>,
+    parent: NodeGuard<'a>,
+) -> Result<bool, ()> {
     if child.height.get() < parent.height.get() {
         return Ok(true);
     }
@@ -253,22 +287,18 @@ fn set_min_height<'a>(node: NodeGuard<'a>, min_height: usize) -> Result<(), ()> 
             if let Err(_loop_ids) = set_min_height(parent, min_height + 1) {
                 did_err = true;
             }
-        };
+        }
         if did_err {
-            return Err(())
+            return Err(());
         }
     }
     node.visited.set(false);
     Ok(())
 }
 
-
 #[cfg(test)]
 mod test {
     use super::*;
-    
-    
-    
 
     fn to_vec<I: std::iter::Iterator>(iter: I) -> Vec<I::Item> {
         iter.collect()
@@ -369,7 +399,7 @@ mod test {
         let c = graph.insert_testing();
         ensure_height_increases(b, c).unwrap();
         b.add_clean_parent(c);
-        ensure_height_increases(c,b).unwrap_err();
+        ensure_height_increases(c, b).unwrap_err();
     }
 
     #[test]

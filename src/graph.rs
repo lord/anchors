@@ -1,7 +1,4 @@
-
-use crate::singlethread::graph2::{Graph2};
-
-
+use crate::singlethread::graph2::Graph2;
 
 pub struct MetadataGraph {
     graph: Graph2,

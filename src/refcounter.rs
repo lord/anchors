@@ -1,4 +1,4 @@
-use slotmap::{Key};
+use slotmap::Key;
 use std::cell::RefCell;
 use std::fmt::Debug;
 use std::hash::Hash;

@@ -19,7 +19,6 @@ use std::cell::RefCell;
 use std::panic::Location;
 use std::rc::Rc;
 
-
 use std::num::NonZeroU64;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
@@ -29,7 +28,7 @@ impl Generation {
         Generation(NonZeroU64::new(1).unwrap())
     }
     fn increment(&mut self) {
-        let gen: u64  = u64::from(self.0) + 1;
+        let gen: u64 = u64::from(self.0) + 1;
         self.0 = NonZeroU64::new(gen).unwrap();
     }
 }
@@ -167,7 +166,7 @@ impl Engine {
         let anchor_node = self.graph.get(anchor.data.num).unwrap();
         if self.to_recalculate.borrow().state(anchor.data.num) != NodeState::Ready {
             self.to_recalculate
-            .borrow_mut()
+                .borrow_mut()
                 .queue_recalc(anchor_node.height.get(), anchor.data.num);
             // stabilize again, to make sure our target node that is now in the queue is up-to-date
             // use stabilize0 because no dirty marks have occured since last stabilization, and we want
@@ -220,7 +219,8 @@ impl Engine {
             };
 
             if !calculation_complete {
-                self.to_recalculate.borrow_mut()
+                self.to_recalculate
+                    .borrow_mut()
                     .queue_recalc(height, this_node_num);
             }
             next = {
@@ -322,7 +322,7 @@ impl Engine {
                 let node = self.graph.get(this_node_num).unwrap();
                 node.last_ready.set(Some(self.generation));
                 true
-            },
+            }
         }
     }
 
@@ -358,7 +358,9 @@ impl Engine {
 
     fn mark_node_for_recalculation(&self, node_id: NodeNum) {
         let node = self.graph.get(node_id).unwrap();
-        self.to_recalculate.borrow_mut().queue_recalc(node.height.get(), node_id);
+        self.to_recalculate
+            .borrow_mut()
+            .queue_recalc(node.height.get(), node_id);
     }
 }
 
@@ -421,8 +423,7 @@ impl<'eng> OutputContext<'eng> for EngineContext<'eng> {
     where
         'eng: 'out,
     {
-        if self.engine.to_recalculate.borrow().state(anchor.data.num) != NodeState::Ready
-        {
+        if self.engine.to_recalculate.borrow().state(anchor.data.num) != NodeState::Ready {
             panic!("attempted to get node that was not previously requested")
         }
         let node = self.engine.graph.get(anchor.data.num).unwrap();
@@ -445,8 +446,7 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
     where
         'slf: 'out,
     {
-        if self.engine.to_recalculate.borrow().state(anchor.data.num) != NodeState::Ready
-        {
+        if self.engine.to_recalculate.borrow().state(anchor.data.num) != NodeState::Ready {
             panic!("attempted to get node that was not previously requested")
         }
 
@@ -477,7 +477,8 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
         };
 
         let self_is_necessary =
-            Engine::check_observed_raw(self.engine.graph.get(self.node_num).unwrap()) != ObservedState::Unnecessary;
+            Engine::check_observed_raw(self.engine.graph.get(self.node_num).unwrap())
+                != ObservedState::Unnecessary;
 
         if self.engine.to_recalculate.borrow().state(anchor.data.num) != NodeState::Ready {
             self.pending_on_anchor_get = true;
@@ -495,7 +496,7 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
                 self_node.add_necessary_child(child);
             }
             match (child.last_update.get(), self_node.last_ready.get()) {
-                (Some(a), Some(b)) if a <= b =>  Poll::Unchanged,
+                (Some(a), Some(b)) if a <= b => Poll::Unchanged,
                 _ => Poll::Updated,
             }
         }
