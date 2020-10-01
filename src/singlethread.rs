@@ -8,9 +8,8 @@
 
 pub mod graph2;
 
-use graph2::{Graph2, NodeGuard};
+use graph2::{Graph2, NodeGuard, RecalcState};
 
-use crate::nodequeue::{NodeState};
 use crate::refcounter::RefCounter;
 use crate::{Anchor, AnchorInner, OutputContext, Poll, UpdateContext};
 
@@ -131,7 +130,7 @@ impl Engine {
     pub fn mark_observed<O: 'static>(&mut self, anchor: &Anchor<O, Engine>) {
         let node = self.graph.get(anchor.data.num).unwrap();
         node.observed.set(true);
-        if graph2::recalc_state(node) != NodeState::Ready {
+        if graph2::recalc_state(node) != RecalcState::Ready {
             self.graph.queue_recalc(node);
         }
     }
@@ -163,7 +162,7 @@ impl Engine {
         // as dirty
         self.stabilize();
         let anchor_node = self.graph.get(anchor.data.num).unwrap();
-        if graph2::recalc_state(anchor_node) != NodeState::Ready {
+        if graph2::recalc_state(anchor_node) != RecalcState::Ready {
             self.graph.queue_recalc(anchor_node);
             // stabilize again, to make sure our target node that is now in the queue is up-to-date
             // use stabilize0 because no dirty marks have occured since last stabilization, and we want
@@ -233,9 +232,9 @@ impl Engine {
         //         "   --   "
         //     };
         //     let state = match self.to_recalculate.borrow_mut().state(node_id) {
-        //         NodeState::NeedsRecalc => "NeedsRecalc  ",
-        //         NodeState::PendingRecalc => "PendingRecalc",
-        //         NodeState::Ready => "Ready        ",
+        //         RecalcState::NeedsRecalc => "NeedsRecalc  ",
+        //         RecalcState::PendingRecalc => "PendingRecalc",
+        //         RecalcState::Ready => "Ready        ",
         //     };
         //     debug += &format!(
         //         "{:>80}  {}  {}  {}\n",
@@ -331,7 +330,7 @@ impl Engine {
         let id = next.key.get();
         if Self::check_observed_raw(next) != ObservedState::Unnecessary {
             self.graph.queue_recalc(next);
-        } else if graph2::recalc_state(next) == NodeState::Ready {
+        } else if graph2::recalc_state(next) == RecalcState::Ready {
             graph2::needs_recalc(next);
             let parents = next.drain_clean_parents();
             for parent in parents {
@@ -402,7 +401,7 @@ impl<'eng> OutputContext<'eng> for EngineContext<'eng> {
         'eng: 'out,
     {
         let node = self.engine.graph.get(anchor.data.num).unwrap();
-        if graph2::recalc_state(node) != NodeState::Ready {
+        if graph2::recalc_state(node) != RecalcState::Ready {
             panic!("attempted to get node that was not previously requested")
         }
         let unsafe_borrow = unsafe { node.anchor.as_ptr().as_ref().unwrap() };
@@ -425,7 +424,7 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
         'slf: 'out,
     {
         let node = self.engine.graph.get(anchor.data.num).unwrap();
-        if graph2::recalc_state(node) != NodeState::Ready {
+        if graph2::recalc_state(node) != RecalcState::Ready {
             panic!("attempted to get node that was not previously requested")
         }
 
@@ -458,7 +457,7 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
             Engine::check_observed_raw(self.engine.graph.get(self.node_num).unwrap())
                 != ObservedState::Unnecessary;
 
-        if graph2::recalc_state(child) != NodeState::Ready {
+        if graph2::recalc_state(child) != RecalcState::Ready {
             self.pending_on_anchor_get = true;
             self.engine.graph.queue_recalc(child);
             if necessary && self_is_necessary {

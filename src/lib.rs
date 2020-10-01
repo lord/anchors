@@ -4,8 +4,6 @@ use std::panic::Location;
 mod ext;
 pub use ext::AnchorExt;
 mod constant;
-mod fakeheap;
-mod nodequeue;
 mod refcounter;
 pub mod singlethread;
 mod var;

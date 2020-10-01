@@ -9,7 +9,18 @@ use std::marker::PhantomData;
 
 use crate::singlethread::NodeNum;
 
-pub use crate::nodequeue::NodeState;
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum RecalcState {
+    Needed,
+    Pending,
+    Ready,
+}
+
+impl Default for RecalcState {
+    fn default() -> Self {
+        RecalcState::Needed
+    }
+}
 
 pub struct Graph2 {
     nodes: Arena<Node>,
@@ -55,7 +66,7 @@ pub struct NodePtrs {
     recalc_next: Cell<Option<*const Node>>,
     /// Prev node in recalc linked list for this height. IF this is the head node, None.
     recalc_prev: Cell<Option<*const Node>>,
-    recalc_state: Cell<NodeState>,
+    recalc_state: Cell<RecalcState>,
 
     /// sorted in pointer order
     necessary_children: RefCell<Vec<*const Node>>,
@@ -280,11 +291,11 @@ impl Graph2 {
     }
 
     pub fn queue_recalc<'a>(&'a self, node: NodeGuard<'a>) {
-        if node.ptrs.recalc_state.get() == NodeState::PendingRecalc {
+        if node.ptrs.recalc_state.get() == RecalcState::Pending {
             // already in recalc queue
             return;
         }
-        node.ptrs.recalc_state.set(NodeState::PendingRecalc);
+        node.ptrs.recalc_state.set(RecalcState::Pending);
         let node_height = height(node);
         let mut recalc_queues = self.recalc_queues.borrow_mut();
         if node_height >= recalc_queues.len() {
@@ -315,7 +326,7 @@ impl Graph2 {
                 }
                 node.ptrs.recalc_prev.set(None);
                 node.ptrs.recalc_next.set(None);
-                node.ptrs.recalc_state.set(NodeState::Ready);
+                node.ptrs.recalc_state.set(RecalcState::Ready);
                 return Some((self.recalc_min_height.get(), NodeGuard {
                     inside: node,
                     f: PhantomData,
@@ -368,14 +379,14 @@ pub fn height<'a>(node: NodeGuard<'a>) -> usize {
 }
 
 pub fn needs_recalc<'a>(node: NodeGuard<'a>) {
-    if node.ptrs.recalc_state.get() != NodeState::Ready {
+    if node.ptrs.recalc_state.get() != RecalcState::Ready {
         // already in recalc queue, or already pending recalc
         return;
     }
-    node.ptrs.recalc_state.set(NodeState::NeedsRecalc);
+    node.ptrs.recalc_state.set(RecalcState::Needed);
 }
 
-pub fn recalc_state<'a>(node: NodeGuard<'a>) -> NodeState {
+pub fn recalc_state<'a>(node: NodeGuard<'a>) -> RecalcState {
     node.ptrs.recalc_state.get()
 }
 
