@@ -1,12 +1,11 @@
+#![feature(negative_impls)]
+
 use std::marker::PhantomData;
 use std::panic::Location;
 
 mod ext;
 pub use ext::AnchorExt;
 mod constant;
-mod fakeheap;
-mod graph;
-mod nodequeue;
 mod refcounter;
 pub mod singlethread;
 mod var;
@@ -293,7 +292,6 @@ mod test {
     #[test]
     fn test_observed_marking() {
         use crate::singlethread::ObservedState;
-        use crate::AnchorHandle;
 
         let mut engine = crate::singlethread::Engine::new();
         let (v1, _v1_setter) = crate::var::Var::new(1usize);
@@ -303,79 +301,31 @@ mod test {
         engine.mark_observed(&a);
         engine.mark_observed(&c);
 
-        assert_eq!(
-            ObservedState::Unnecessary,
-            engine.check_observed(v1.data.token())
-        );
-        assert_eq!(
-            ObservedState::Observed,
-            engine.check_observed(a.data.token())
-        );
-        assert_eq!(
-            ObservedState::Unnecessary,
-            engine.check_observed(b.data.token())
-        );
-        assert_eq!(
-            ObservedState::Observed,
-            engine.check_observed(c.data.token())
-        );
+        assert_eq!(ObservedState::Unnecessary, engine.check_observed(&v1));
+        assert_eq!(ObservedState::Observed, engine.check_observed(&a));
+        assert_eq!(ObservedState::Unnecessary, engine.check_observed(&b));
+        assert_eq!(ObservedState::Observed, engine.check_observed(&c));
 
         engine.stabilize();
 
-        assert_eq!(
-            ObservedState::Necessary,
-            engine.check_observed(v1.data.token())
-        );
-        assert_eq!(
-            ObservedState::Observed,
-            engine.check_observed(a.data.token())
-        );
-        assert_eq!(
-            ObservedState::Necessary,
-            engine.check_observed(b.data.token())
-        );
-        assert_eq!(
-            ObservedState::Observed,
-            engine.check_observed(c.data.token())
-        );
+        assert_eq!(ObservedState::Necessary, engine.check_observed(&v1));
+        assert_eq!(ObservedState::Observed, engine.check_observed(&a));
+        assert_eq!(ObservedState::Necessary, engine.check_observed(&b));
+        assert_eq!(ObservedState::Observed, engine.check_observed(&c));
 
         engine.mark_unobserved(&c);
 
-        assert_eq!(
-            ObservedState::Necessary,
-            engine.check_observed(v1.data.token())
-        );
-        assert_eq!(
-            ObservedState::Observed,
-            engine.check_observed(a.data.token())
-        );
-        assert_eq!(
-            ObservedState::Unnecessary,
-            engine.check_observed(b.data.token())
-        );
-        assert_eq!(
-            ObservedState::Unnecessary,
-            engine.check_observed(c.data.token())
-        );
+        assert_eq!(ObservedState::Necessary, engine.check_observed(&v1));
+        assert_eq!(ObservedState::Observed, engine.check_observed(&a));
+        assert_eq!(ObservedState::Unnecessary, engine.check_observed(&b));
+        assert_eq!(ObservedState::Unnecessary, engine.check_observed(&c));
 
         engine.mark_unobserved(&a);
 
-        assert_eq!(
-            ObservedState::Unnecessary,
-            engine.check_observed(v1.data.token())
-        );
-        assert_eq!(
-            ObservedState::Unnecessary,
-            engine.check_observed(a.data.token())
-        );
-        assert_eq!(
-            ObservedState::Unnecessary,
-            engine.check_observed(b.data.token())
-        );
-        assert_eq!(
-            ObservedState::Unnecessary,
-            engine.check_observed(c.data.token())
-        );
+        assert_eq!(ObservedState::Unnecessary, engine.check_observed(&v1));
+        assert_eq!(ObservedState::Unnecessary, engine.check_observed(&a));
+        assert_eq!(ObservedState::Unnecessary, engine.check_observed(&b));
+        assert_eq!(ObservedState::Unnecessary, engine.check_observed(&c));
     }
 
     #[test]
