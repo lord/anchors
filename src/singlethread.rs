@@ -10,6 +10,8 @@ pub mod graph2;
 
 use graph2::{Graph2, NodeGuard, RecalcState, NodeKey};
 
+pub use graph2::AnchorHandle;
+
 use crate::refcounter::RefCounter;
 use crate::{Anchor, AnchorInner, OutputContext, Poll, UpdateContext};
 
@@ -327,33 +329,6 @@ impl Engine {
                 self.mark_dirty0(parent);
             }
         }
-    }
-}
-
-/// Singlethread's implementation of Anchors' `AnchorHandle`, the engine-specific handle that sits inside an `Anchor`.
-#[derive(Debug)]
-pub struct AnchorHandle {
-    num: NodeKey,
-}
-
-impl Clone for AnchorHandle {
-    fn clone(&self) -> Self {
-        // self.refcounter.increment(self.num);
-        AnchorHandle {
-            num: self.num,
-        }
-    }
-}
-
-impl Drop for AnchorHandle {
-    fn drop(&mut self) {
-        // self.refcounter.decrement(self.num);
-    }
-}
-impl crate::AnchorHandle for AnchorHandle {
-    type Token = NodeKey;
-    fn token(&self) -> NodeKey {
-        self.num
     }
 }
 

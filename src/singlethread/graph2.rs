@@ -88,6 +88,33 @@ pub struct NodePtrs {
     height: Cell<usize>,
 }
 
+/// Singlethread's implementation of Anchors' `AnchorHandle`, the engine-specific handle that sits inside an `Anchor`.
+#[derive(Debug)]
+pub struct AnchorHandle {
+    pub (super) num: NodeKey,
+}
+
+impl Clone for AnchorHandle {
+    fn clone(&self) -> Self {
+        // self.refcounter.increment(self.num);
+        AnchorHandle {
+            num: self.num,
+        }
+    }
+}
+
+impl Drop for AnchorHandle {
+    fn drop(&mut self) {
+        // self.refcounter.decrement(self.num);
+    }
+}
+impl crate::AnchorHandle for AnchorHandle {
+    type Token = NodeKey;
+    fn token(&self) -> NodeKey {
+        self.num
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct NodeGuard<'a> {
     inside: &'a Node,
