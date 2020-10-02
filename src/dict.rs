@@ -2,7 +2,7 @@ use crate::{Anchor, Engine};
 use im::OrdMap;
 use im::ordmap::DiffItem;
 
-type Dict<K, V> = OrdMap<K, V>;
+pub type Dict<K, V> = OrdMap<K, V>;
 
 impl <E: Engine, K, V> Anchor<Dict<K, V>, E> {
     fn filter<F: Fn(K, V) -> bool>(&self, f: F) -> Anchor<Dict<K, V>, E> {
