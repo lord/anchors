@@ -83,11 +83,8 @@ impl crate::Engine for Engine {
                 .as_mut()
                 .expect("no engine was initialized. did you call `Engine::new()`?");
             let debug_info = inner.debug_info();
-            let num = this.graph.insert(Box::new(inner), debug_info);
-            this.refcounter.create(num);
-            Anchor::new(AnchorHandle {
-                num,
-            })
+            let handle = this.graph.insert(Box::new(inner), debug_info);
+            Anchor::new(handle)
         })
     }
 }

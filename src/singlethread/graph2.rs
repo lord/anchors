@@ -298,7 +298,7 @@ impl Graph2 {
 
     #[cfg(test)]
     pub fn insert_testing<'a>(&'a self) -> NodeGuard<'a> {
-        let key = self.insert(
+        let handle = self.insert(
             Box::new(crate::constant::Constant::new_raw_testing(
                 123,
             )),
@@ -307,14 +307,14 @@ impl Graph2 {
                 type_info: "testing dummy anchor",
             },
         );
-        self.get(key).unwrap()
+        self.get(handle.num).unwrap()
     }
 
     pub(super) fn insert<'a>(
         &'a self,
         anchor: Box<dyn GenericAnchor>,
         debug_info: AnchorDebugInfo,
-    ) -> NodeKey {
+    ) -> AnchorHandle {
         let mut node = Node {
             observed: Cell::new(false),
             visited: Cell::new(false),
@@ -330,10 +330,11 @@ impl Graph2 {
         // TODO this probably is not actually necessary if there's no way to take a Node out of the graph
         node.ptrs = NodePtrs::default();
         let ptr = self.nodes.alloc(node);
-        NodeKey {
+        let num = NodeKey {
             ptr: ptr as *const Node,
             token: self.token,
-        }
+        };
+        AnchorHandle {num}
     }
 
     pub fn get<'a>(&'a self, key: NodeKey) -> Option<NodeGuard<'a>> {
