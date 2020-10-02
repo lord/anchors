@@ -27,6 +27,8 @@ pub struct Graph2 {
     nodes: Arena<Node>,
     token: u32,
 
+    still_alive: Rc<Cell<bool>>,
+
     /// height -> first node in that height's queue
     recalc_queues: RefCell<Vec<Option<*const Node>>>,
     recalc_min_height: Cell<usize>,
@@ -89,18 +91,10 @@ pub struct NodePtrs {
 }
 
 /// Singlethread's implementation of Anchors' `AnchorHandle`, the engine-specific handle that sits inside an `Anchor`.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AnchorHandle {
     num: NodeKey,
-}
-
-impl Clone for AnchorHandle {
-    fn clone(&self) -> Self {
-        // self.refcounter.increment(self.num);
-        AnchorHandle {
-            num: self.num,
-        }
-    }
+    still_alive: Rc<Cell<bool>>,
 }
 
 impl Drop for AnchorHandle {
@@ -293,6 +287,7 @@ impl Graph2 {
             recalc_queues: RefCell::new(vec![None; max_height]),
             recalc_min_height: Cell::new(max_height),
             recalc_max_height: Cell::new(0),
+            still_alive: Rc::new(Cell::new(true)),
         }
     }
 
@@ -307,7 +302,10 @@ impl Graph2 {
                 type_info: "testing dummy anchor",
             },
         );
-        self.get(handle.num).unwrap()
+        let guard = self.get(handle.num).unwrap();
+        // for testing purposes, make sure we never drop the handle
+        std::mem::forget(handle);
+        guard
     }
 
     pub(super) fn insert<'a>(
@@ -334,7 +332,7 @@ impl Graph2 {
             ptr: ptr as *const Node,
             token: self.token,
         };
-        AnchorHandle {num}
+        AnchorHandle {num, still_alive: self.still_alive.clone()}
     }
 
     pub fn get<'a>(&'a self, key: NodeKey) -> Option<NodeGuard<'a>> {
@@ -394,6 +392,12 @@ impl Graph2 {
         }
         self.recalc_max_height.set(0);
         None
+    }
+}
+
+impl Drop for Graph2 {
+    fn drop(&mut self) {
+        self.still_alive.set(false);
     }
 }
 
