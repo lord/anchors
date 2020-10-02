@@ -33,6 +33,9 @@ pub struct Graph2 {
     recalc_queues: RefCell<Vec<Option<*const Node>>>,
     recalc_min_height: Cell<usize>,
     recalc_max_height: Cell<usize>,
+
+    /// pointer to head of linked list of free nodes
+    free_head: Box<Cell<Option<*const Node>>>,
 }
 
 pub struct Node {
@@ -72,34 +75,57 @@ impl !Sync for NodeGuard<'_>{}
 impl !Send for Graph2{}
 impl !Sync for Graph2{}
 
-#[derive(Default)]
 pub struct NodePtrs {
     /// first parent, remaining parents. unsorted, duplicates may exist
     clean_parent0: Cell<Option<*const Node>>,
     clean_parents: RefCell<Vec<*const Node>>,
 
-    /// Next node in recalc linked list for this height. If this is the last node, None.
-    recalc_next: Cell<Option<*const Node>>,
-    /// Prev node in recalc linked list for this height. IF this is the head node, None.
-    recalc_prev: Cell<Option<*const Node>>,
+    free_head: *const Cell<Option<*const Node>>,
+
+    /// Next node in either recalc linked list for this height, or if node is in the free list, the free linked list. If this is the last node, None.
+    next: Cell<Option<*const Node>>,
+    /// Prev node in either recalc linked list for this height, or if node is in the free list, the free linked list. IF this is the head node, None.
+    prev: Cell<Option<*const Node>>,
     recalc_state: Cell<RecalcState>,
 
     /// sorted in pointer order
     necessary_children: RefCell<Vec<*const Node>>,
 
     height: Cell<usize>,
+
+    handle_count: Cell<usize>,
 }
 
 /// Singlethread's implementation of Anchors' `AnchorHandle`, the engine-specific handle that sits inside an `Anchor`.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct AnchorHandle {
     num: NodeKey,
     still_alive: Rc<Cell<bool>>,
 }
 
+impl Clone for AnchorHandle {
+    fn clone(&self) -> Self {
+        if self.still_alive.get() {
+            let count = &unsafe {&*self.num.ptr}.ptrs.handle_count;
+            count.set(count.get() + 1);
+        }
+        AnchorHandle {
+            num: self.num.clone(),
+            still_alive: self.still_alive.clone(),
+        }
+    }
+}
+
 impl Drop for AnchorHandle {
     fn drop(&mut self) {
-        // self.refcounter.decrement(self.num);
+        if self.still_alive.get() {
+            let count = &unsafe {&*self.num.ptr}.ptrs.handle_count;
+            let new_count = count.get() - 1;
+            count.set(new_count);
+            if new_count == 0 {
+                unsafe { free(self.num.ptr) };
+            }
+        }
     }
 }
 impl crate::AnchorHandle for AnchorHandle {
@@ -288,6 +314,7 @@ impl Graph2 {
             recalc_min_height: Cell::new(max_height),
             recalc_max_height: Cell::new(0),
             still_alive: Rc::new(Cell::new(true)),
+            free_head: Box::new(Cell::new(None)),
         }
     }
 
@@ -313,21 +340,53 @@ impl Graph2 {
         anchor: Box<dyn GenericAnchor>,
         debug_info: AnchorDebugInfo,
     ) -> AnchorHandle {
-        let mut node = Node {
-            observed: Cell::new(false),
-            visited: Cell::new(false),
-            necessary_count: Cell::new(0),
-            token: self.token,
-            ptrs: NodePtrs::default(),
-            debug_info: Cell::new(debug_info),
-            last_ready: Cell::new(None),
-            last_update: Cell::new(None),
-            anchor: RefCell::new(Some(anchor)),
+        let ptr = if let Some(free_head) = self.free_head.get() {
+            let node = unsafe {&*free_head};
+            self.free_head.set(node.ptrs.next.get());
+            if let Some(next_ptr) = node.ptrs.next.get() {
+                let next_node = unsafe {&*next_ptr};
+                next_node.ptrs.prev.set(None);
+            }
+            node.observed.set(false);
+            node.visited.set(false);
+            node.necessary_count.set(0);
+            node.ptrs.clean_parent0.set(None);
+            node.ptrs.clean_parents.replace(vec![]);
+            node.ptrs.recalc_state.set(RecalcState::Needed);
+            node.ptrs.necessary_children.replace(vec![]);
+            node.ptrs.height.set(0);
+            node.ptrs.handle_count.set(1);
+            node.ptrs.prev.set(None);
+            node.ptrs.next.set(None);
+            node.debug_info.set(debug_info);
+            node.last_ready.set(None);
+            node.last_update.set(None);
+            node.anchor.replace(Some(anchor));
+            node
+        } else {
+            let mut node = Node {
+                observed: Cell::new(false),
+                visited: Cell::new(false),
+                necessary_count: Cell::new(0),
+                token: self.token,
+                ptrs: NodePtrs {
+                    clean_parent0: Cell::new(None),
+                    clean_parents: RefCell::new(vec![]),
+                    next: Cell::new(None),
+                    prev: Cell::new(None),
+                    recalc_state: Cell::new(RecalcState::Needed),
+                    necessary_children: RefCell::new(vec![]),
+                    height: Cell::new(0),
+                    handle_count: Cell::new(1),
+                    free_head: &*self.free_head
+                },
+                debug_info: Cell::new(debug_info),
+                last_ready: Cell::new(None),
+                last_update: Cell::new(None),
+                anchor: RefCell::new(Some(anchor)),
+            };
+            self.nodes.alloc(node)
         };
-        // SAFETY: ensure ptrs struct is empty on insert
-        // TODO this probably is not actually necessary if there's no way to take a Node out of the graph
-        node.ptrs = NodePtrs::default();
-        let ptr = self.nodes.alloc(node);
         let num = NodeKey {
             ptr: ptr as *const Node,
             token: self.token,
@@ -357,8 +416,8 @@ impl Graph2 {
             panic!("too large height error");
         }
         if let Some(old) = recalc_queues[node_height] {
-            unsafe {&*old}.ptrs.recalc_prev.set(Some(node.inside as *const Node));
-            node.ptrs.recalc_next.set(Some(old as *const Node));
+            unsafe {&*old}.ptrs.prev.set(Some(node.inside as *const Node));
+            node.ptrs.next.set(Some(old as *const Node));
         } else {
             if self.recalc_min_height.get() > node_height {
                 self.recalc_min_height.set(node_height);
@@ -375,12 +434,12 @@ impl Graph2 {
         while self.recalc_min_height.get() <= self.recalc_max_height.get() {
             if let Some(ptr) = recalc_queues[self.recalc_min_height.get()] {
                 let node = unsafe { &*ptr };
-                recalc_queues[self.recalc_min_height.get()] = node.ptrs.recalc_next.get();
-                if let Some(next_in_queue_ptr) = node.ptrs.recalc_next.get() {
-                    unsafe {&*next_in_queue_ptr}.ptrs.recalc_prev.set(None);
+                recalc_queues[self.recalc_min_height.get()] = node.ptrs.next.get();
+                if let Some(next_in_queue_ptr) = node.ptrs.next.get() {
+                    unsafe {&*next_in_queue_ptr}.ptrs.prev.set(None);
                 }
-                node.ptrs.recalc_prev.set(None);
-                node.ptrs.recalc_next.set(None);
+                node.ptrs.prev.set(None);
+                node.ptrs.next.set(None);
                 node.ptrs.recalc_state.set(RecalcState::Ready);
                 return Some((self.recalc_min_height.get(), NodeGuard {
                     inside: node,
@@ -433,6 +492,32 @@ fn set_min_height<'a>(node: NodeGuard<'a>, min_height: usize) -> Result<(), ()> 
     }
     node.visited.set(false);
     Ok(())
+}
+
+fn dequeue_calc<'a>(guard: NodeGuard<'a>) {
+    if guard.ptrs.recalc_state.get() != RecalcState::Pending {
+        return;
+    }
+    unimplemented!()
+}
+
+unsafe fn free(ptr: *const Node) {
+    let guard = NodeGuard {f: PhantomData, inside: &*ptr};
+    let _ = guard.drain_necessary_children();
+    let _ = guard.drain_clean_parents();
+    dequeue_calc(guard);
+    // TODO clear out this node with default empty data
+    // TODO add node to chain of free nodes
+    let free_head = &*guard.inside.ptrs.free_head;
+    let old_free = free_head.get();
+    if let Some(old_free) = old_free {
+        (*old_free).ptrs.prev.set(Some(ptr));
+    }
+    guard.inside.ptrs.next.set(old_free);
+    free_head.set(Some(ptr));
+
+    // "SAFETY": this may cause other nodes to be dropped, so do with care
+    *guard.inside.anchor.borrow_mut() = None;
 }
 
 pub fn height<'a>(node: NodeGuard<'a>) -> usize {
