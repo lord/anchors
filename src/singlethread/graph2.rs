@@ -319,8 +319,8 @@ impl Graph2 {
     }
 
     #[cfg(test)]
-    pub fn insert_testing<'a>(&'a self) -> NodeGuard<'a> {
-        let handle = self.insert(
+    pub fn insert_testing<'a>(&'a self) -> AnchorHandle {
+        self.insert(
             Box::new(crate::constant::Constant::new_raw_testing(
                 123,
             )),
@@ -328,9 +328,13 @@ impl Graph2 {
                 location: None,
                 type_info: "testing dummy anchor",
             },
-        );
+        )
+    }
+
+    #[cfg(test)]
+    pub fn insert_testing_guard<'a>(&'a self) -> NodeGuard<'a> {
+        let handle = self.insert_testing();
         let guard = self.get(handle.num).unwrap();
-        // for testing purposes, make sure we never drop the handle
         std::mem::forget(handle);
         guard
     }
@@ -547,8 +551,8 @@ mod test {
     #[test]
     fn set_edge_updates_correctly() {
         let graph = Graph2::new(256);
-        let a = graph.insert_testing();
-        let b = graph.insert_testing();
+        let a = graph.insert_testing_guard();
+        let b = graph.insert_testing_guard();
         let empty: Vec<NodeGuard<'_>> = vec![];
 
         assert_eq!(empty, to_vec(a.necessary_children()));
@@ -601,9 +605,9 @@ mod test {
     #[test]
     fn height_calculated_correctly() {
         let graph = Graph2::new(256);
-        let a = graph.insert_testing();
-        let b = graph.insert_testing();
-        let c = graph.insert_testing();
+        let a = graph.insert_testing_guard();
+        let b = graph.insert_testing_guard();
+        let c = graph.insert_testing_guard();
 
         assert_eq!(0, height(a));
         assert_eq!(0, height(b));
@@ -635,8 +639,8 @@ mod test {
     #[test]
     fn cycles_cause_error() {
         let graph = Graph2::new(256);
-        let b = graph.insert_testing();
-        let c = graph.insert_testing();
+        let b = graph.insert_testing_guard();
+        let c = graph.insert_testing_guard();
         ensure_height_increases(b, c).unwrap();
         b.add_clean_parent(c);
         ensure_height_increases(c, b).unwrap_err();
@@ -645,11 +649,11 @@ mod test {
     #[test]
     fn non_cycles_wont_cause_errors() {
         let graph = Graph2::new(256);
-        let a = graph.insert_testing();
-        let b = graph.insert_testing();
-        let c = graph.insert_testing();
-        let d = graph.insert_testing();
-        let e = graph.insert_testing();
+        let a = graph.insert_testing_guard();
+        let b = graph.insert_testing_guard();
+        let c = graph.insert_testing_guard();
+        let d = graph.insert_testing_guard();
+        let e = graph.insert_testing_guard();
 
         ensure_height_increases(b, c).unwrap();
         b.add_clean_parent(c);
@@ -667,19 +671,19 @@ mod test {
     fn test_insert_pop() {
         let graph = Graph2::new(10);
 
-        let a = graph.insert_testing();
+        let a = graph.insert_testing_guard();
         set_min_height(a, 0).unwrap();
-        let b = graph.insert_testing();
+        let b = graph.insert_testing_guard();
         set_min_height(b, 5).unwrap();
-        let c = graph.insert_testing();
+        let c = graph.insert_testing_guard();
         set_min_height(c, 3).unwrap();
-        let d = graph.insert_testing();
+        let d = graph.insert_testing_guard();
         set_min_height(d, 4).unwrap();
-        let e = graph.insert_testing();
+        let e = graph.insert_testing_guard();
         set_min_height(e, 1).unwrap();
-        let e2 = graph.insert_testing();
+        let e2 = graph.insert_testing_guard();
         set_min_height(e2, 1).unwrap();
-        let e3 = graph.insert_testing();
+        let e3 = graph.insert_testing_guard();
         set_min_height(e3, 1).unwrap();
 
         graph.queue_recalc(a);
@@ -709,8 +713,50 @@ mod test {
     #[should_panic]
     fn test_insert_above_max_height() {
         let graph = Graph2::new(10);
-        let a = graph.insert_testing();
+        let a = graph.insert_testing_guard();
         set_min_height(a, 10).unwrap();
         graph.queue_recalc(a);
+    }
+
+    #[test]
+    fn test_free_list() {
+        use crate::AnchorHandle;
+        let graph = Graph2::new(10);
+        let a = graph.insert_testing();
+        let b = graph.insert_testing();
+        let c = graph.insert_testing();
+
+        let a_token = a.token();
+        let b_token = b.token();
+        let c_token = c.token();
+
+        std::mem::drop(a);
+        std::mem::drop(b);
+        std::mem::drop(c);
+
+        let c = graph.insert_testing();
+        let b = graph.insert_testing();
+        let a = graph.insert_testing();
+        let d = graph.insert_testing();
+
+        assert_eq!(a_token, a.token());
+        assert_eq!(b_token, b.token());
+        assert_eq!(c_token, c.token());
+        let d_token = d.token();
+
+        std::mem::drop(c);
+        std::mem::drop(a);
+        std::mem::drop(b);
+        std::mem::drop(d);
+
+        let d = graph.insert_testing();
+        let b = graph.insert_testing();
+        let a = graph.insert_testing();
+        let c = graph.insert_testing();
+
+        assert_eq!(a_token, a.token());
+        assert_eq!(b_token, b.token());
+        assert_eq!(c_token, c.token());
+        assert_eq!(d_token, d.token());
     }
 }
