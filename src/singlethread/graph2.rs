@@ -91,7 +91,7 @@ pub struct NodePtrs {
 /// Singlethread's implementation of Anchors' `AnchorHandle`, the engine-specific handle that sits inside an `Anchor`.
 #[derive(Debug)]
 pub struct AnchorHandle {
-    pub (super) num: NodeKey,
+    num: NodeKey,
 }
 
 impl Clone for AnchorHandle {
