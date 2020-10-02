@@ -85,7 +85,6 @@ impl crate::Engine for Engine {
             this.refcounter.create(num);
             Anchor::new(AnchorHandle {
                 num,
-                refcounter: this.refcounter.clone(),
             })
         })
     }
@@ -335,22 +334,20 @@ impl Engine {
 #[derive(Debug)]
 pub struct AnchorHandle {
     num: NodeKey,
-    refcounter: RefCounter<NodeKey>,
 }
 
 impl Clone for AnchorHandle {
     fn clone(&self) -> Self {
-        self.refcounter.increment(self.num);
+        // self.refcounter.increment(self.num);
         AnchorHandle {
             num: self.num,
-            refcounter: self.refcounter.clone(),
         }
     }
 }
 
 impl Drop for AnchorHandle {
     fn drop(&mut self) {
-        self.refcounter.decrement(self.num);
+        // self.refcounter.decrement(self.num);
     }
 }
 impl crate::AnchorHandle for AnchorHandle {
