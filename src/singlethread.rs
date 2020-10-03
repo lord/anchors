@@ -12,7 +12,6 @@ use graph2::{Graph2, NodeGuard, RecalcState, NodeKey};
 
 pub use graph2::AnchorHandle;
 
-use crate::refcounter::RefCounter;
 use crate::{Anchor, AnchorInner, OutputContext, Poll, UpdateContext};
 
 use std::any::Any;
@@ -61,7 +60,6 @@ pub struct Engine {
     // TODO store Nodes on heap directly?? maybe try for Rc<RefCell<SlotMap>> now
     graph: Rc<Graph2>,
     dirty_marks: Rc<RefCell<Vec<NodeKey>>>,
-    refcounter: RefCounter<NodeKey>,
 
     // tracks the current stabilization generation; incremented on every stabilize
     generation: Generation,
@@ -69,7 +67,6 @@ pub struct Engine {
 
 struct Mounter {
     graph: Rc<Graph2>,
-    refcounter: RefCounter<NodeKey>,
 }
 
 impl crate::Engine for Engine {
@@ -97,17 +94,14 @@ impl Engine {
 
     /// Creates a new Engine with a custom maximum height.
     pub fn new_with_max_height(max_height: usize) -> Self {
-        let refcounter = RefCounter::new();
         let graph = Rc::new(Graph2::new(max_height));
         let mounter = Mounter {
-            refcounter: refcounter.clone(),
             graph: graph.clone(),
         };
         DEFAULT_MOUNTER.with(|v| *v.borrow_mut() = Some(mounter));
         Self {
             graph,
             dirty_marks: Default::default(),
-            refcounter,
             generation: Generation::new(),
         }
     }
@@ -203,8 +197,6 @@ impl Engine {
                 self.graph.queue_recalc(node);
             }
         }
-
-        self.garbage_collect();
     }
 
     /// Returns a debug string containing the current state of the recomputation graph.
@@ -253,13 +245,6 @@ impl Engine {
         } else {
             ObservedState::Unnecessary
         }
-    }
-
-    fn garbage_collect(&mut self) {
-        let _graph = &mut self.graph;
-        self.refcounter.drain(|_item| {
-            // TODO REMOVE NODES
-        });
     }
 
     /// returns false if calculation is still pending
