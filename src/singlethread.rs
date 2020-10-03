@@ -314,8 +314,10 @@ impl Engine {
             graph2::needs_recalc(next);
             let parents = next.drain_clean_parents();
             for parent in parents {
-                parent.anchor.borrow_mut().as_mut().unwrap().dirty(&id);
-                self.mark_dirty0(parent);
+                if let Some(v) = parent.anchor.borrow_mut().as_mut() {
+                    v.dirty(&id);
+                    self.mark_dirty0(parent);
+                }
             }
         }
     }
