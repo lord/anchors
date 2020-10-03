@@ -68,12 +68,12 @@ pub struct NodeKey {
     token: u32,
 }
 
-impl !Send for NodeKey{}
-impl !Sync for NodeKey{}
-impl !Send for NodeGuard<'_>{}
-impl !Sync for NodeGuard<'_>{}
-impl !Send for Graph2{}
-impl !Sync for Graph2{}
+impl !Send for NodeKey {}
+impl !Sync for NodeKey {}
+impl !Send for NodeGuard<'_> {}
+impl !Sync for NodeGuard<'_> {}
+impl !Send for Graph2 {}
+impl !Sync for Graph2 {}
 
 pub struct NodePtrs {
     /// first parent, remaining parents. unsorted, duplicates may exist
@@ -106,7 +106,7 @@ pub struct AnchorHandle {
 impl Clone for AnchorHandle {
     fn clone(&self) -> Self {
         if self.still_alive.get() {
-            let count = &unsafe {&*self.num.ptr}.ptrs.handle_count;
+            let count = &unsafe { &*self.num.ptr }.ptrs.handle_count;
             count.set(count.get() + 1);
         }
         AnchorHandle {
@@ -119,7 +119,7 @@ impl Clone for AnchorHandle {
 impl Drop for AnchorHandle {
     fn drop(&mut self) {
         if self.still_alive.get() {
-            let count = &unsafe {&*self.num.ptr}.ptrs.handle_count;
+            let count = &unsafe { &*self.num.ptr }.ptrs.handle_count;
             let new_count = count.get() - 1;
             count.set(new_count);
             if new_count == 0 {
@@ -321,9 +321,7 @@ impl Graph2 {
     #[cfg(test)]
     pub fn insert_testing<'a>(&'a self) -> AnchorHandle {
         self.insert(
-            Box::new(crate::constant::Constant::new_raw_testing(
-                123,
-            )),
+            Box::new(crate::constant::Constant::new_raw_testing(123)),
             AnchorDebugInfo {
                 location: None,
                 type_info: "testing dummy anchor",
@@ -345,10 +343,10 @@ impl Graph2 {
         debug_info: AnchorDebugInfo,
     ) -> AnchorHandle {
         let ptr = if let Some(free_head) = self.free_head.get() {
-            let node = unsafe {&*free_head};
+            let node = unsafe { &*free_head };
             self.free_head.set(node.ptrs.next.get());
             if let Some(next_ptr) = node.ptrs.next.get() {
-                let next_node = unsafe {&*next_ptr};
+                let next_node = unsafe { &*next_ptr };
                 next_node.ptrs.prev.set(None);
             }
             node.observed.set(false);
@@ -382,7 +380,7 @@ impl Graph2 {
                     necessary_children: RefCell::new(vec![]),
                     height: Cell::new(0),
                     handle_count: Cell::new(1),
-                    free_head: &*self.free_head
+                    free_head: &*self.free_head,
                 },
                 debug_info: Cell::new(debug_info),
                 last_ready: Cell::new(None),
@@ -395,7 +393,10 @@ impl Graph2 {
             ptr: ptr as *const Node,
             token: self.token,
         };
-        AnchorHandle {num, still_alive: self.still_alive.clone()}
+        AnchorHandle {
+            num,
+            still_alive: self.still_alive.clone(),
+        }
     }
 
     pub fn get<'a>(&'a self, key: NodeKey) -> Option<NodeGuard<'a>> {
@@ -420,7 +421,10 @@ impl Graph2 {
             panic!("too large height error");
         }
         if let Some(old) = recalc_queues[node_height] {
-            unsafe {&*old}.ptrs.prev.set(Some(node.inside as *const Node));
+            unsafe { &*old }
+                .ptrs
+                .prev
+                .set(Some(node.inside as *const Node));
             node.ptrs.next.set(Some(old as *const Node));
         } else {
             if self.recalc_min_height.get() > node_height {
@@ -440,15 +444,18 @@ impl Graph2 {
                 let node = unsafe { &*ptr };
                 recalc_queues[self.recalc_min_height.get()] = node.ptrs.next.get();
                 if let Some(next_in_queue_ptr) = node.ptrs.next.get() {
-                    unsafe {&*next_in_queue_ptr}.ptrs.prev.set(None);
+                    unsafe { &*next_in_queue_ptr }.ptrs.prev.set(None);
                 }
                 node.ptrs.prev.set(None);
                 node.ptrs.next.set(None);
                 node.ptrs.recalc_state.set(RecalcState::Ready);
-                return Some((self.recalc_min_height.get(), NodeGuard {
-                    inside: node,
-                    f: PhantomData,
-                }));
+                return Some((
+                    self.recalc_min_height.get(),
+                    NodeGuard {
+                        inside: node,
+                        f: PhantomData,
+                    },
+                ));
             } else {
                 self.recalc_min_height.set(self.recalc_min_height.get() + 1);
             }
@@ -506,7 +513,10 @@ fn dequeue_calc<'a>(guard: NodeGuard<'a>) {
 }
 
 unsafe fn free(ptr: *const Node) {
-    let guard = NodeGuard {f: PhantomData, inside: &*ptr};
+    let guard = NodeGuard {
+        f: PhantomData,
+        inside: &*ptr,
+    };
     let _ = guard.drain_necessary_children();
     let _ = guard.drain_clean_parents();
     dequeue_calc(guard);

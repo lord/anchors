@@ -1,23 +1,27 @@
-use crate::{Anchor, Engine, AnchorExt};
-use im::OrdMap;
+use crate::{Anchor, AnchorExt, Engine};
 use im::ordmap::DiffItem;
+use im::OrdMap;
 
 pub type Dict<K, V> = OrdMap<K, V>;
 
-impl <E: Engine, K: Ord + Clone + PartialEq + 'static, V: Clone + PartialEq + 'static> Anchor<Dict<K, V>, E> {
+impl<E: Engine, K: Ord + Clone + PartialEq + 'static, V: Clone + PartialEq + 'static>
+    Anchor<Dict<K, V>, E>
+{
     pub fn filter<F: FnMut(&K, &V) -> bool + 'static>(&self, mut f: F) -> Anchor<Dict<K, V>, E> {
-        self.filter_map(move |k, v| if f(k, v) {
-            Some(v.clone())
-        } else {
-            None
-        })
+        self.filter_map(move |k, v| if f(k, v) { Some(v.clone()) } else { None })
     }
 
-    pub fn map<F: FnMut(&K, &V) -> T + 'static, T: Clone + PartialEq + 'static>(&self, mut f: F) -> Anchor<Dict<K, T>, E> {
+    pub fn map<F: FnMut(&K, &V) -> T + 'static, T: Clone + PartialEq + 'static>(
+        &self,
+        mut f: F,
+    ) -> Anchor<Dict<K, T>, E> {
         self.filter_map(move |k, v| Some(f(k, v)))
     }
 
-    pub fn filter_map<F: FnMut(&K, &V) -> Option<T> + 'static, T: Clone + PartialEq + 'static>(&self, mut f: F) -> Anchor<Dict<K, T>, E> {
+    pub fn filter_map<F: FnMut(&K, &V) -> Option<T> + 'static, T: Clone + PartialEq + 'static>(
+        &self,
+        mut f: F,
+    ) -> Anchor<Dict<K, T>, E> {
         self.unordered_fold(Dict::new(), move |out, diff_item| {
             match diff_item {
                 DiffItem::Add(k, v) => {
@@ -26,7 +30,10 @@ impl <E: Engine, K: Ord + Clone + PartialEq + 'static, V: Clone + PartialEq + 's
                         return true;
                     }
                 }
-                DiffItem::Update{new: (k, v), old: _} => {
+                DiffItem::Update {
+                    new: (k, v),
+                    old: _,
+                } => {
                     if let Some(new) = f(k, v) {
                         out.insert(k.clone(), new);
                         return true;
@@ -44,7 +51,14 @@ impl <E: Engine, K: Ord + Clone + PartialEq + 'static, V: Clone + PartialEq + 's
         })
     }
 
-    pub fn unordered_fold<T: PartialEq + Clone + 'static, F: for<'a> FnMut(&mut T, DiffItem<'a, K, V>) -> bool + 'static>(&self, initial_state: T, mut f: F) -> Anchor<T, E> {
+    pub fn unordered_fold<
+        T: PartialEq + Clone + 'static,
+        F: for<'a> FnMut(&mut T, DiffItem<'a, K, V>) -> bool + 'static,
+    >(
+        &self,
+        initial_state: T,
+        mut f: F,
+    ) -> Anchor<T, E> {
         let mut last_observation = Dict::new();
         self.map_mut(initial_state, move |mut out, this| {
             let mut did_update = false;

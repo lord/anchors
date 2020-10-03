@@ -59,7 +59,6 @@ pub trait AnchorExt<E: Engine>: Sized {
         F: 'static,
         map_mut::MapMut<Self::Target, F, Out>: AnchorInner<E, Output = Out>;
 
-
     /// Creates an Anchor that maps a number of incremental input values to some output Anchor.
     /// With `then`, your computation graph can dynamically select an Anchor to recalculate based
     /// on some other incremental computation..

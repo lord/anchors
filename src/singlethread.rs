@@ -8,7 +8,7 @@
 
 pub mod graph2;
 
-use graph2::{Graph2, NodeGuard, RecalcState, NodeKey};
+use graph2::{Graph2, NodeGuard, NodeKey, RecalcState};
 
 pub use graph2::AnchorHandle;
 
@@ -157,9 +157,7 @@ impl Engine {
         borrow
             .as_ref()
             .unwrap()
-            .output(&mut EngineContext {
-                engine: &self,
-            })
+            .output(&mut EngineContext { engine: &self })
             .downcast_ref::<O>()
             .unwrap()
             .clone()
@@ -255,7 +253,11 @@ impl Engine {
             node: node,
             pending_on_anchor_get: false,
         };
-        let poll_result = this_anchor.borrow_mut().as_mut().unwrap().poll_updated(&mut ecx);
+        let poll_result = this_anchor
+            .borrow_mut()
+            .as_mut()
+            .unwrap()
+            .poll_updated(&mut ecx);
         let pending_on_anchor_get = ecx.pending_on_anchor_get;
         match poll_result {
             Poll::Pending => {
@@ -291,7 +293,12 @@ impl Engine {
             let parents = node.drain_clean_parents();
             for parent in parents {
                 // TODO still calling dirty twice on observed relationships
-                parent.anchor.borrow_mut().as_mut().unwrap().dirty(&node.key());
+                parent
+                    .anchor
+                    .borrow_mut()
+                    .as_mut()
+                    .unwrap()
+                    .dirty(&node.key());
                 self.mark_dirty0(parent);
             }
         } else {
@@ -397,9 +404,7 @@ impl<'eng> UpdateContext for EngineContextMut<'eng> {
             }
         };
 
-        let self_is_necessary =
-            Engine::check_observed_raw(self.node)
-                != ObservedState::Unnecessary;
+        let self_is_necessary = Engine::check_observed_raw(self.node) != ObservedState::Unnecessary;
 
         if graph2::recalc_state(child) != RecalcState::Ready {
             self.pending_on_anchor_get = true;
