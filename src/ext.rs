@@ -3,6 +3,7 @@ use std::panic::Location;
 
 mod cutoff;
 mod map;
+mod map_mut;
 mod refmap;
 mod then;
 
@@ -51,6 +52,13 @@ pub trait AnchorExt<E: Engine>: Sized {
         Out: 'static,
         F: 'static,
         map::Map<Self::Target, F, Out>: AnchorInner<E, Output = Out>;
+
+    fn map_mut<F, Out>(self, initial: Out, f: F) -> Anchor<Out, E>
+    where
+        Out: 'static,
+        F: 'static,
+        map_mut::MapMut<Self::Target, F, Out>: AnchorInner<E, Output = Out>;
+
 
     /// Creates an Anchor that maps a number of incremental input values to some output Anchor.
     /// With `then`, your computation graph can dynamically select an Anchor to recalculate based
@@ -192,6 +200,22 @@ where
     }
 
     #[track_caller]
+    fn map_mut<F, Out>(self, initial: Out, f: F) -> Anchor<Out, E>
+    where
+        Out: 'static,
+        F: 'static,
+        map_mut::MapMut<Self::Target, F, Out>: AnchorInner<E, Output = Out>,
+    {
+        E::mount(map_mut::MapMut {
+            anchors: (self.clone(),),
+            f,
+            output: initial,
+            output_stale: true,
+            location: Location::caller(),
+        })
+    }
+
+    #[track_caller]
     fn then<F, Out>(self, f: F) -> Anchor<Out, E>
     where
         F: 'static,
@@ -274,6 +298,22 @@ macro_rules! impl_tuple_ext {
                     anchors: ($(self.$num.clone(),)+),
                     f,
                     output: None,
+                    output_stale: true,
+                    location: Location::caller(),
+                })
+            }
+
+            #[track_caller]
+            fn map_mut<F, Out>(self, initial: Out, f: F) -> Anchor<Out, E>
+            where
+                Out: 'static,
+                F: 'static,
+                map_mut::MapMut<Self::Target, F, Out>: AnchorInner<E, Output=Out>,
+            {
+                E::mount(map_mut::MapMut {
+                    anchors: ($(self.$num.clone(),)+),
+                    f,
+                    output: initial,
                     output_stale: true,
                     location: Location::caller(),
                 })

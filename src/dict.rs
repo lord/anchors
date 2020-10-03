@@ -20,8 +20,4 @@ impl <E: Engine, K, V> Anchor<Dict<K, V>, E> {
     fn unordered_fold<T, F: for<'a> Fn(&mut T, DiffItem<'a, K, V>)>(&self, initial_state: T, f: F) -> Anchor<T, E> {
         unimplemented!()
     }
-
-    fn merge<F: Fn()>(&self, other: Anchor<Dict<K, V>, E>) -> Anchor<Dict<K, V>, E> {
-        unimplemented!()
-    }
 }
