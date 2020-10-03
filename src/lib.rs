@@ -6,7 +6,6 @@ use std::panic::Location;
 mod ext;
 pub use ext::AnchorExt;
 mod constant;
-mod refcounter;
 pub mod singlethread;
 mod var;
 pub use constant::Constant;
