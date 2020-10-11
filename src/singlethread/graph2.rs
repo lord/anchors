@@ -509,7 +509,19 @@ fn dequeue_calc<'a>(guard: NodeGuard<'a>) {
     if guard.ptrs.recalc_state.get() != RecalcState::Pending {
         return;
     }
-    unimplemented!()
+    if let Some(prev) = guard.ptrs.prev.get() {
+        unsafe { &*prev }.ptrs.next.set(guard.ptrs.next.get());
+    } else {
+        // node was first in queue, need to set queue head to next
+        unimplemented!()
+    }
+
+    if let Some(next) = guard.ptrs.next.get() {
+        unsafe { &*next }.ptrs.next.set(guard.ptrs.prev.get());
+    }
+
+    guard.ptrs.prev.set(None);
+    guard.ptrs.next.set(None);
 }
 
 unsafe fn free(ptr: *const Node) {
