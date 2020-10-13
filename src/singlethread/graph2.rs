@@ -1,10 +1,16 @@
 use super::{AnchorDebugInfo, Generation, GenericAnchor};
 use std::cell::{Cell, RefCell, RefMut};
 use std::rc::Rc;
-use typed_arena::Arena;
+
+use arena_graph::raw as ag;
 
 use std::iter::Iterator;
 use std::marker::PhantomData;
+
+#[derive(PartialEq, Clone, Copy, Debug)]
+pub struct NodeGuard<'gg>(ag::NodeGuard<'gg, Node>);
+
+type NodePtr = ag::NodePtr<Node>;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum RecalcState {
@@ -24,18 +30,24 @@ thread_local! {
 }
 
 pub struct Graph2 {
-    nodes: Arena<Node>,
+    nodes: ag::Graph<Node>,
     token: u32,
 
     still_alive: Rc<Cell<bool>>,
 
     /// height -> first node in that height's queue
-    recalc_queues: RefCell<Vec<Option<*const Node>>>,
+    recalc_queues: RefCell<Vec<Option<NodePtr>>>,
     recalc_min_height: Cell<usize>,
     recalc_max_height: Cell<usize>,
 
     /// pointer to head of linked list of free nodes
-    free_head: Box<Cell<Option<*const Node>>>,
+    free_head: Box<Cell<Option<NodePtr>>>,
+}
+
+#[derive(Clone, Copy)]
+pub struct Graph2Guard<'gg> {
+    nodes: ag::GraphGuard<'gg, Node>,
+    graph: &'gg Graph2,
 }
 
 pub struct Node {
@@ -62,34 +74,32 @@ pub struct Node {
     pub ptrs: NodePtrs,
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct NodeKey {
-    ptr: *const Node,
+    ptr: NodePtr,
     token: u32,
 }
 
 impl !Send for NodeKey {}
 impl !Sync for NodeKey {}
-impl !Send for NodeGuard<'_> {}
-impl !Sync for NodeGuard<'_> {}
-impl !Send for Graph2 {}
-impl !Sync for Graph2 {}
 
 pub struct NodePtrs {
     /// first parent, remaining parents. unsorted, duplicates may exist
-    clean_parent0: Cell<Option<*const Node>>,
-    clean_parents: RefCell<Vec<*const Node>>,
+    clean_parent0: Cell<Option<NodePtr>>,
+    clean_parents: RefCell<Vec<NodePtr>>,
 
-    free_head: *const Cell<Option<*const Node>>,
+    free_head: *const Cell<Option<NodePtr>>,
 
-    /// Next node in either recalc linked list for this height, or if node is in the free list, the free linked list. If this is the last node, None.
-    next: Cell<Option<*const Node>>,
-    /// Prev node in either recalc linked list for this height, or if node is in the free list, the free linked list. IF this is the head node, None.
-    prev: Cell<Option<*const Node>>,
+    /// Next node in either recalc linked list for this height, or if node is in the free list, the free linked list.
+    /// If this is the last node, None.
+    next: Cell<Option<NodePtr>>,
+    /// Prev node in either recalc linked list for this height, or if node is in the free list, the free linked list.
+    /// If this is the head node, None.
+    prev: Cell<Option<NodePtr>>,
     recalc_state: Cell<RecalcState>,
 
     /// sorted in pointer order
-    necessary_children: RefCell<Vec<*const Node>>,
+    necessary_children: RefCell<Vec<NodePtr>>,
 
     height: Cell<usize>,
 
@@ -106,7 +116,7 @@ pub struct AnchorHandle {
 impl Clone for AnchorHandle {
     fn clone(&self) -> Self {
         if self.still_alive.get() {
-            let count = &unsafe { &*self.num.ptr }.ptrs.handle_count;
+            let count = &unsafe { self.num.ptr.lookup_unchecked() }.ptrs.handle_count;
             count.set(count.get() + 1);
         }
         AnchorHandle {
@@ -119,9 +129,10 @@ impl Clone for AnchorHandle {
 impl Drop for AnchorHandle {
     fn drop(&mut self) {
         if self.still_alive.get() {
-            let count = &unsafe { &*self.num.ptr }.ptrs.handle_count;
+            let count = &unsafe { self.num.ptr.lookup_unchecked() }.ptrs.handle_count;
             let new_count = count.get() - 1;
             count.set(new_count);
+            std::mem::drop(count);
             if new_count == 0 {
                 unsafe { free(self.num.ptr) };
             }
@@ -135,63 +146,39 @@ impl crate::AnchorHandle for AnchorHandle {
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct NodeGuard<'a> {
-    inside: &'a Node,
-    // hack to make NodeGuard invariant
-    f: PhantomData<&'a mut &'a ()>,
-}
-
-use std::fmt;
-impl fmt::Debug for NodeGuard<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("NodeGuard")
-            .field("inside.key", &self.key())
-            .finish()
-    }
-}
-
-impl PartialEq for NodeGuard<'_> {
-    fn eq(&self, other: &Self) -> bool {
-        std::ptr::eq(self.inside, other.inside)
-    }
-}
-
 impl<'a> std::ops::Deref for NodeGuard<'a> {
     type Target = Node;
     fn deref(&self) -> &Node {
-        &self.inside
+        &*self.0
     }
 }
 
 impl<'a> NodeGuard<'a> {
     pub fn key(self) -> NodeKey {
         NodeKey {
-            ptr: self.inside as *const Node,
+            ptr: unsafe { self.0.make_ptr() },
             token: self.token,
         }
     }
 
     pub fn add_clean_parent(self, parent: NodeGuard<'a>) {
-        if self.inside.ptrs.clean_parent0.get().is_none() {
-            self.inside
-                .ptrs
+        if self.ptrs.clean_parent0.get().is_none() {
+            self.ptrs
                 .clean_parent0
-                .set(Some(parent.inside as *const Node))
+                .set(Some(unsafe { parent.0.make_ptr() }))
         } else {
-            self.inside
-                .ptrs
+            self.ptrs
                 .clean_parents
                 .borrow_mut()
-                .push(parent.inside)
+                .push(unsafe { parent.0.make_ptr() })
         }
     }
 
     pub fn clean_parents(self) -> impl Iterator<Item = NodeGuard<'a>> {
         RefCellVecIterator {
-            inside: self.inside.ptrs.clean_parents.borrow_mut(),
+            inside: self.0.node().ptrs.clean_parents.borrow_mut(),
             next_i: 0,
-            first: self.inside.ptrs.clean_parent0.get(),
+            first: self.ptrs.clean_parent0.get(),
             f: PhantomData,
             empty_on_drop: false,
         }
@@ -199,39 +186,35 @@ impl<'a> NodeGuard<'a> {
 
     pub fn drain_clean_parents(self) -> impl Iterator<Item = NodeGuard<'a>> {
         RefCellVecIterator {
-            inside: self.inside.ptrs.clean_parents.borrow_mut(),
+            inside: self.0.node().ptrs.clean_parents.borrow_mut(),
             next_i: 0,
-            first: self.inside.ptrs.clean_parent0.take(),
+            first: self.ptrs.clean_parent0.take(),
             f: PhantomData,
             empty_on_drop: true,
         }
     }
 
     pub fn add_necessary_child(self, child: NodeGuard<'a>) {
-        let mut necessary_children = self.inside.ptrs.necessary_children.borrow_mut();
-        if let Err(i) = necessary_children.binary_search(&(child.inside as *const Node)) {
-            necessary_children.insert(i, child.inside as *const Node);
-            child
-                .inside
-                .necessary_count
-                .set(child.inside.necessary_count.get() + 1)
+        let mut necessary_children = self.ptrs.necessary_children.borrow_mut();
+        let child_ptr = unsafe { child.0.make_ptr() };
+        if let Err(i) = necessary_children.binary_search(&child_ptr) {
+            necessary_children.insert(i, child_ptr);
+            child.necessary_count.set(child.necessary_count.get() + 1)
         }
     }
 
     pub fn remove_necessary_child(self, child: NodeGuard<'a>) {
-        let mut necessary_children = self.inside.ptrs.necessary_children.borrow_mut();
-        if let Ok(i) = necessary_children.binary_search(&(child.inside as *const Node)) {
+        let mut necessary_children = self.ptrs.necessary_children.borrow_mut();
+        let child_ptr = unsafe { child.0.make_ptr() };
+        if let Ok(i) = necessary_children.binary_search(&child_ptr) {
             necessary_children.remove(i);
-            child
-                .inside
-                .necessary_count
-                .set(child.inside.necessary_count.get() - 1)
+            child.necessary_count.set(child.necessary_count.get() - 1)
         }
     }
 
     pub fn necessary_children(self) -> impl Iterator<Item = NodeGuard<'a>> {
         RefCellVecIterator {
-            inside: self.inside.ptrs.necessary_children.borrow_mut(),
+            inside: self.0.node().ptrs.necessary_children.borrow_mut(),
             next_i: 0,
             first: None,
             f: PhantomData,
@@ -240,9 +223,9 @@ impl<'a> NodeGuard<'a> {
     }
 
     pub fn drain_necessary_children(self) -> impl Iterator<Item = NodeGuard<'a>> {
-        let necessary_children = self.inside.ptrs.necessary_children.borrow_mut();
+        let necessary_children = self.0.node().ptrs.necessary_children.borrow_mut();
         for child in &*necessary_children {
-            let count = &unsafe { &**child }.necessary_count;
+            let count = &unsafe { self.0.lookup_ptr(*child) }.necessary_count;
             count.set(count.get() - 1);
         }
         RefCellVecIterator {
@@ -256,9 +239,9 @@ impl<'a> NodeGuard<'a> {
 }
 
 struct RefCellVecIterator<'a> {
-    inside: RefMut<'a, Vec<*const Node>>,
+    inside: RefMut<'a, Vec<NodePtr>>,
     next_i: usize,
-    first: Option<*const Node>,
+    first: Option<NodePtr>,
     // hack to make RefCellVecIterator invariant
     f: PhantomData<&'a mut &'a ()>,
     empty_on_drop: bool,
@@ -269,17 +252,11 @@ impl<'a> Iterator for RefCellVecIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(first) = self.first.take() {
-            return Some(NodeGuard {
-                inside: unsafe { &*first },
-                f: self.f,
-            });
+            return Some(NodeGuard(unsafe { first.lookup_unchecked() }));
         }
         let next = self.inside.get(self.next_i)?;
         self.next_i += 1;
-        Some(NodeGuard {
-            inside: unsafe { &**next },
-            f: self.f,
-        })
+        Some(NodeGuard(unsafe { next.lookup_unchecked() }))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -301,10 +278,81 @@ impl<'a> Drop for RefCellVecIterator<'a> {
     }
 }
 
+impl<'gg> Graph2Guard<'gg> {
+    pub fn get(&self, key: NodeKey) -> Option<NodeGuard<'gg>> {
+        if key.token != self.graph.token {
+            return None;
+        }
+        Some(NodeGuard(unsafe { self.nodes.lookup_ptr(key.ptr) }))
+    }
+
+    #[cfg(test)]
+    pub fn insert_testing_guard(&self) -> NodeGuard<'gg> {
+        let handle = self.graph.insert_testing();
+        let guard = self.get(handle.num).unwrap();
+        std::mem::forget(handle);
+        guard
+    }
+
+    pub fn recalc_pop_next(&self) -> Option<(usize, NodeGuard<'gg>)> {
+        let mut recalc_queues = self.graph.recalc_queues.borrow_mut();
+        while self.graph.recalc_min_height.get() <= self.graph.recalc_max_height.get() {
+            if let Some(ptr) = recalc_queues[self.graph.recalc_min_height.get()] {
+                let node = unsafe { self.nodes.lookup_ptr(ptr) };
+                recalc_queues[self.graph.recalc_min_height.get()] = node.ptrs.next.get();
+                if let Some(next_in_queue_ptr) = node.ptrs.next.get() {
+                    unsafe { self.nodes.lookup_ptr(next_in_queue_ptr) }
+                        .ptrs
+                        .prev
+                        .set(None);
+                }
+                node.ptrs.prev.set(None);
+                node.ptrs.next.set(None);
+                node.ptrs.recalc_state.set(RecalcState::Ready);
+                return Some((self.graph.recalc_min_height.get(), NodeGuard(node)));
+            } else {
+                self.graph
+                    .recalc_min_height
+                    .set(self.graph.recalc_min_height.get() + 1);
+            }
+        }
+        self.graph.recalc_max_height.set(0);
+        None
+    }
+
+    pub fn queue_recalc(&self, node: NodeGuard<'gg>) {
+        if node.ptrs.recalc_state.get() == RecalcState::Pending {
+            // already in recalc queue
+            return;
+        }
+        node.ptrs.recalc_state.set(RecalcState::Pending);
+        let node_height = height(node);
+        let mut recalc_queues = self.graph.recalc_queues.borrow_mut();
+        if node_height >= recalc_queues.len() {
+            panic!("too large height error");
+        }
+        if let Some(old) = recalc_queues[node_height] {
+            unsafe { self.nodes.lookup_ptr(old) }
+                .ptrs
+                .prev
+                .set(Some(unsafe { node.0.make_ptr() }));
+            node.ptrs.next.set(Some(old));
+        } else {
+            if self.graph.recalc_min_height.get() > node_height {
+                self.graph.recalc_min_height.set(node_height);
+            }
+            if self.graph.recalc_max_height.get() < node_height {
+                self.graph.recalc_max_height.set(node_height);
+            }
+        }
+        recalc_queues[node_height] = Some(unsafe { node.0.make_ptr() });
+    }
+}
+
 impl Graph2 {
     pub fn new(max_height: usize) -> Self {
         Self {
-            nodes: Arena::new(),
+            nodes: ag::Graph::new(),
             token: NEXT_TOKEN.with(|token| {
                 let n = token.get();
                 token.set(n + 1);
@@ -318,6 +366,11 @@ impl Graph2 {
         }
     }
 
+    pub fn with<F: for<'any> FnOnce(Graph2Guard<'any>) -> R, R>(&self, func: F) -> R {
+        let nodes = unsafe { self.nodes.with_unchecked() };
+        func(Graph2Guard { nodes, graph: self })
+    }
+
     #[cfg(test)]
     pub fn insert_testing<'a>(&'a self) -> AnchorHandle {
         self.insert(
@@ -329,139 +382,68 @@ impl Graph2 {
         )
     }
 
-    #[cfg(test)]
-    pub fn insert_testing_guard<'a>(&'a self) -> NodeGuard<'a> {
-        let handle = self.insert_testing();
-        let guard = self.get(handle.num).unwrap();
-        std::mem::forget(handle);
-        guard
-    }
-
     pub(super) fn insert<'a>(
         &'a self,
         anchor: Box<dyn GenericAnchor>,
         debug_info: AnchorDebugInfo,
     ) -> AnchorHandle {
-        let ptr = if let Some(free_head) = self.free_head.get() {
-            let node = unsafe { &*free_head };
-            self.free_head.set(node.ptrs.next.get());
-            if let Some(next_ptr) = node.ptrs.next.get() {
-                let next_node = unsafe { &*next_ptr };
-                next_node.ptrs.prev.set(None);
-            }
-            node.observed.set(false);
-            node.visited.set(false);
-            node.necessary_count.set(0);
-            node.ptrs.clean_parent0.set(None);
-            node.ptrs.clean_parents.replace(vec![]);
-            node.ptrs.recalc_state.set(RecalcState::Needed);
-            node.ptrs.necessary_children.replace(vec![]);
-            node.ptrs.height.set(0);
-            node.ptrs.handle_count.set(1);
-            node.ptrs.prev.set(None);
-            node.ptrs.next.set(None);
-            node.debug_info.set(debug_info);
-            node.last_ready.set(None);
-            node.last_update.set(None);
-            node.anchor.replace(Some(anchor));
-            node
-        } else {
-            let mut node = Node {
-                observed: Cell::new(false),
-                visited: Cell::new(false),
-                necessary_count: Cell::new(0),
-                token: self.token,
-                ptrs: NodePtrs {
-                    clean_parent0: Cell::new(None),
-                    clean_parents: RefCell::new(vec![]),
-                    next: Cell::new(None),
-                    prev: Cell::new(None),
-                    recalc_state: Cell::new(RecalcState::Needed),
-                    necessary_children: RefCell::new(vec![]),
-                    height: Cell::new(0),
-                    handle_count: Cell::new(1),
-                    free_head: &*self.free_head,
-                },
-                debug_info: Cell::new(debug_info),
-                last_ready: Cell::new(None),
-                last_update: Cell::new(None),
-                anchor: RefCell::new(Some(anchor)),
-            };
-            self.nodes.alloc(node)
-        };
-        let num = NodeKey {
-            ptr: ptr as *const Node,
-            token: self.token,
-        };
-        AnchorHandle {
-            num,
-            still_alive: self.still_alive.clone(),
-        }
-    }
-
-    pub fn get<'a>(&'a self, key: NodeKey) -> Option<NodeGuard<'a>> {
-        if key.token != self.token {
-            return None;
-        }
-        Some(NodeGuard {
-            inside: unsafe { &*key.ptr },
-            f: PhantomData,
-        })
-    }
-
-    pub fn queue_recalc<'a>(&'a self, node: NodeGuard<'a>) {
-        if node.ptrs.recalc_state.get() == RecalcState::Pending {
-            // already in recalc queue
-            return;
-        }
-        node.ptrs.recalc_state.set(RecalcState::Pending);
-        let node_height = height(node);
-        let mut recalc_queues = self.recalc_queues.borrow_mut();
-        if node_height >= recalc_queues.len() {
-            panic!("too large height error");
-        }
-        if let Some(old) = recalc_queues[node_height] {
-            unsafe { &*old }
-                .ptrs
-                .prev
-                .set(Some(node.inside as *const Node));
-            node.ptrs.next.set(Some(old as *const Node));
-        } else {
-            if self.recalc_min_height.get() > node_height {
-                self.recalc_min_height.set(node_height);
-            }
-            if self.recalc_max_height.get() < node_height {
-                self.recalc_max_height.set(node_height);
-            }
-        }
-        recalc_queues[node_height] = Some(node.inside as *const Node);
-    }
-
-    pub fn recalc_pop_next<'a>(&'a self) -> Option<(usize, NodeGuard<'a>)> {
-        let mut recalc_queues = self.recalc_queues.borrow_mut();
-        while self.recalc_min_height.get() <= self.recalc_max_height.get() {
-            if let Some(ptr) = recalc_queues[self.recalc_min_height.get()] {
-                let node = unsafe { &*ptr };
-                recalc_queues[self.recalc_min_height.get()] = node.ptrs.next.get();
-                if let Some(next_in_queue_ptr) = node.ptrs.next.get() {
-                    unsafe { &*next_in_queue_ptr }.ptrs.prev.set(None);
+        self.nodes.with(|nodes| {
+            let ptr = if let Some(free_head) = self.free_head.get() {
+                let node = unsafe { nodes.lookup_ptr(free_head) };
+                self.free_head.set(node.ptrs.next.get());
+                if let Some(next_ptr) = node.ptrs.next.get() {
+                    let next_node = unsafe { nodes.lookup_ptr(next_ptr) };
+                    next_node.ptrs.prev.set(None);
                 }
+                node.observed.set(false);
+                node.visited.set(false);
+                node.necessary_count.set(0);
+                node.ptrs.clean_parent0.set(None);
+                node.ptrs.clean_parents.replace(vec![]);
+                node.ptrs.recalc_state.set(RecalcState::Needed);
+                node.ptrs.necessary_children.replace(vec![]);
+                node.ptrs.height.set(0);
+                node.ptrs.handle_count.set(1);
                 node.ptrs.prev.set(None);
                 node.ptrs.next.set(None);
-                node.ptrs.recalc_state.set(RecalcState::Ready);
-                return Some((
-                    self.recalc_min_height.get(),
-                    NodeGuard {
-                        inside: node,
-                        f: PhantomData,
-                    },
-                ));
+                node.debug_info.set(debug_info);
+                node.last_ready.set(None);
+                node.last_update.set(None);
+                node.anchor.replace(Some(anchor));
+                node
             } else {
-                self.recalc_min_height.set(self.recalc_min_height.get() + 1);
+                let mut node = Node {
+                    observed: Cell::new(false),
+                    visited: Cell::new(false),
+                    necessary_count: Cell::new(0),
+                    token: self.token,
+                    ptrs: NodePtrs {
+                        clean_parent0: Cell::new(None),
+                        clean_parents: RefCell::new(vec![]),
+                        next: Cell::new(None),
+                        prev: Cell::new(None),
+                        recalc_state: Cell::new(RecalcState::Needed),
+                        necessary_children: RefCell::new(vec![]),
+                        height: Cell::new(0),
+                        handle_count: Cell::new(1),
+                        free_head: &*self.free_head,
+                    },
+                    debug_info: Cell::new(debug_info),
+                    last_ready: Cell::new(None),
+                    last_update: Cell::new(None),
+                    anchor: RefCell::new(Some(anchor)),
+                };
+                nodes.insert(node)
+            };
+            let num = NodeKey {
+                ptr: unsafe { ptr.make_ptr() },
+                token: self.token,
+            };
+            AnchorHandle {
+                num,
+                still_alive: self.still_alive.clone(),
             }
-        }
-        self.recalc_max_height.set(0);
-        None
+        })
     }
 }
 
@@ -510,40 +492,43 @@ fn dequeue_calc<'a>(guard: NodeGuard<'a>) {
         return;
     }
     if let Some(prev) = guard.ptrs.prev.get() {
-        unsafe { &*prev }.ptrs.next.set(guard.ptrs.next.get());
+        unsafe { prev.lookup_unchecked() }
+            .ptrs
+            .next
+            .set(guard.ptrs.next.get());
     } else {
         // node was first in queue, need to set queue head to next
         unimplemented!()
     }
 
     if let Some(next) = guard.ptrs.next.get() {
-        unsafe { &*next }.ptrs.next.set(guard.ptrs.prev.get());
+        unsafe { next.lookup_unchecked() }
+            .ptrs
+            .next
+            .set(guard.ptrs.prev.get());
     }
 
     guard.ptrs.prev.set(None);
     guard.ptrs.next.set(None);
 }
 
-unsafe fn free(ptr: *const Node) {
-    let guard = NodeGuard {
-        f: PhantomData,
-        inside: &*ptr,
-    };
+unsafe fn free(ptr: NodePtr) {
+    let guard = NodeGuard(ptr.lookup_unchecked());
     let _ = guard.drain_necessary_children();
     let _ = guard.drain_clean_parents();
     dequeue_calc(guard);
     // TODO clear out this node with default empty data
     // TODO add node to chain of free nodes
-    let free_head = &*guard.inside.ptrs.free_head;
+    let free_head = &*guard.ptrs.free_head;
     let old_free = free_head.get();
     if let Some(old_free) = old_free {
-        (*old_free).ptrs.prev.set(Some(ptr));
+        guard.0.lookup_ptr(old_free).ptrs.prev.set(Some(ptr));
     }
-    guard.inside.ptrs.next.set(old_free);
+    guard.ptrs.next.set(old_free);
     free_head.set(Some(ptr));
 
     // "SAFETY": this may cause other nodes to be dropped, so do with care
-    *guard.inside.anchor.borrow_mut() = None;
+    *guard.anchor.borrow_mut() = None;
 }
 
 pub fn height<'a>(node: NodeGuard<'a>) -> usize {
@@ -573,171 +558,182 @@ mod test {
     #[test]
     fn set_edge_updates_correctly() {
         let graph = Graph2::new(256);
-        let a = graph.insert_testing_guard();
-        let b = graph.insert_testing_guard();
-        let empty: Vec<NodeGuard<'_>> = vec![];
+        graph.with(|guard| {
+            let a = guard.insert_testing_guard();
+            let b = guard.insert_testing_guard();
+            let empty: Vec<NodeGuard<'_>> = vec![];
 
-        assert_eq!(empty, to_vec(a.necessary_children()));
-        assert_eq!(empty, to_vec(a.clean_parents()));
-        assert_eq!(empty, to_vec(b.necessary_children()));
-        assert_eq!(empty, to_vec(b.clean_parents()));
-        assert_eq!(false, a.necessary_count.get() > 0);
-        assert_eq!(false, b.necessary_count.get() > 0);
+            assert_eq!(empty, to_vec(a.necessary_children()));
+            assert_eq!(empty, to_vec(a.clean_parents()));
+            assert_eq!(empty, to_vec(b.necessary_children()));
+            assert_eq!(empty, to_vec(b.clean_parents()));
+            assert_eq!(false, a.necessary_count.get() > 0);
+            assert_eq!(false, b.necessary_count.get() > 0);
 
-        assert_eq!(Ok(false), ensure_height_increases(a, b));
-        assert_eq!(Ok(true), ensure_height_increases(a, b));
-        a.add_clean_parent(b);
+            assert_eq!(Ok(false), ensure_height_increases(a, b));
+            assert_eq!(Ok(true), ensure_height_increases(a, b));
+            a.add_clean_parent(b);
 
-        assert_eq!(empty, to_vec(a.necessary_children()));
-        assert_eq!(vec![b], to_vec(a.clean_parents()));
-        assert_eq!(empty, to_vec(b.necessary_children()));
-        assert_eq!(empty, to_vec(b.clean_parents()));
-        assert_eq!(false, a.necessary_count.get() > 0);
-        assert_eq!(false, b.necessary_count.get() > 0);
+            assert_eq!(empty, to_vec(a.necessary_children()));
+            assert_eq!(vec![b], to_vec(a.clean_parents()));
+            assert_eq!(empty, to_vec(b.necessary_children()));
+            assert_eq!(empty, to_vec(b.clean_parents()));
+            assert_eq!(false, a.necessary_count.get() > 0);
+            assert_eq!(false, b.necessary_count.get() > 0);
 
-        assert_eq!(Ok(true), ensure_height_increases(a, b));
-        b.add_necessary_child(a);
+            assert_eq!(Ok(true), ensure_height_increases(a, b));
+            b.add_necessary_child(a);
 
-        assert_eq!(empty, to_vec(a.necessary_children()));
-        assert_eq!(vec![b], to_vec(a.clean_parents()));
-        assert_eq!(vec![a], to_vec(b.necessary_children()));
-        assert_eq!(empty, to_vec(b.clean_parents()));
-        assert_eq!(true, a.necessary_count.get() > 0);
-        assert_eq!(false, b.necessary_count.get() > 0);
+            assert_eq!(empty, to_vec(a.necessary_children()));
+            assert_eq!(vec![b], to_vec(a.clean_parents()));
+            assert_eq!(vec![a], to_vec(b.necessary_children()));
+            assert_eq!(empty, to_vec(b.clean_parents()));
+            assert_eq!(true, a.necessary_count.get() > 0);
+            assert_eq!(false, b.necessary_count.get() > 0);
 
-        let _ = a.drain_clean_parents();
+            let _ = a.drain_clean_parents();
 
-        assert_eq!(empty, to_vec(a.necessary_children()));
-        assert_eq!(empty, to_vec(a.clean_parents()));
-        assert_eq!(vec![a], to_vec(b.necessary_children()));
-        assert_eq!(empty, to_vec(b.clean_parents()));
-        assert_eq!(true, a.necessary_count.get() > 0);
-        assert_eq!(false, b.necessary_count.get() > 0);
+            assert_eq!(empty, to_vec(a.necessary_children()));
+            assert_eq!(empty, to_vec(a.clean_parents()));
+            assert_eq!(vec![a], to_vec(b.necessary_children()));
+            assert_eq!(empty, to_vec(b.clean_parents()));
+            assert_eq!(true, a.necessary_count.get() > 0);
+            assert_eq!(false, b.necessary_count.get() > 0);
 
-        let _ = b.drain_necessary_children();
+            let _ = b.drain_necessary_children();
 
-        assert_eq!(empty, to_vec(a.necessary_children()));
-        assert_eq!(empty, to_vec(a.clean_parents()));
-        assert_eq!(empty, to_vec(b.necessary_children()));
-        assert_eq!(empty, to_vec(b.clean_parents()));
-        assert_eq!(false, a.necessary_count.get() > 0);
-        assert_eq!(false, b.necessary_count.get() > 0);
+            assert_eq!(empty, to_vec(a.necessary_children()));
+            assert_eq!(empty, to_vec(a.clean_parents()));
+            assert_eq!(empty, to_vec(b.necessary_children()));
+            assert_eq!(empty, to_vec(b.clean_parents()));
+            assert_eq!(false, a.necessary_count.get() > 0);
+            assert_eq!(false, b.necessary_count.get() > 0);
+        });
     }
 
     #[test]
     fn height_calculated_correctly() {
         let graph = Graph2::new(256);
-        let a = graph.insert_testing_guard();
-        let b = graph.insert_testing_guard();
-        let c = graph.insert_testing_guard();
+        graph.with(|guard| {
+            let a = guard.insert_testing_guard();
+            let b = guard.insert_testing_guard();
+            let c = guard.insert_testing_guard();
 
-        assert_eq!(0, height(a));
-        assert_eq!(0, height(b));
-        assert_eq!(0, height(c));
+            assert_eq!(0, height(a));
+            assert_eq!(0, height(b));
+            assert_eq!(0, height(c));
 
-        assert_eq!(Ok(false), ensure_height_increases(b, c));
-        assert_eq!(Ok(true), ensure_height_increases(b, c));
-        b.add_clean_parent(c);
+            assert_eq!(Ok(false), ensure_height_increases(b, c));
+            assert_eq!(Ok(true), ensure_height_increases(b, c));
+            b.add_clean_parent(c);
 
-        assert_eq!(0, height(a));
-        assert_eq!(0, height(b));
-        assert_eq!(1, height(c));
+            assert_eq!(0, height(a));
+            assert_eq!(0, height(b));
+            assert_eq!(1, height(c));
 
-        assert_eq!(Ok(false), ensure_height_increases(a, b));
-        assert_eq!(Ok(true), ensure_height_increases(a, b));
-        a.add_clean_parent(b);
+            assert_eq!(Ok(false), ensure_height_increases(a, b));
+            assert_eq!(Ok(true), ensure_height_increases(a, b));
+            a.add_clean_parent(b);
 
-        assert_eq!(0, height(a));
-        assert_eq!(1, height(b));
-        assert_eq!(2, height(c));
+            assert_eq!(0, height(a));
+            assert_eq!(1, height(b));
+            assert_eq!(2, height(c));
 
-        let _ = a.drain_clean_parents();
+            let _ = a.drain_clean_parents();
 
-        assert_eq!(0, height(a));
-        assert_eq!(1, height(b));
-        assert_eq!(2, height(c));
+            assert_eq!(0, height(a));
+            assert_eq!(1, height(b));
+            assert_eq!(2, height(c));
+        })
     }
 
     #[test]
     fn cycles_cause_error() {
         let graph = Graph2::new(256);
-        let b = graph.insert_testing_guard();
-        let c = graph.insert_testing_guard();
-        ensure_height_increases(b, c).unwrap();
-        b.add_clean_parent(c);
-        ensure_height_increases(c, b).unwrap_err();
+        graph.with(|guard| {
+            let b = guard.insert_testing_guard();
+            let c = guard.insert_testing_guard();
+            ensure_height_increases(b, c).unwrap();
+            b.add_clean_parent(c);
+            ensure_height_increases(c, b).unwrap_err();
+        })
     }
 
     #[test]
     fn non_cycles_wont_cause_errors() {
         let graph = Graph2::new(256);
-        let a = graph.insert_testing_guard();
-        let b = graph.insert_testing_guard();
-        let c = graph.insert_testing_guard();
-        let d = graph.insert_testing_guard();
-        let e = graph.insert_testing_guard();
+        graph.with(|guard| {
+            let a = guard.insert_testing_guard();
+            let b = guard.insert_testing_guard();
+            let c = guard.insert_testing_guard();
+            let d = guard.insert_testing_guard();
+            let e = guard.insert_testing_guard();
 
-        ensure_height_increases(b, c).unwrap();
-        b.add_clean_parent(c);
-        ensure_height_increases(c, e).unwrap();
-        c.add_clean_parent(e);
-        ensure_height_increases(b, d).unwrap();
-        b.add_clean_parent(d);
-        ensure_height_increases(d, e).unwrap();
-        d.add_clean_parent(e);
-        ensure_height_increases(a, b).unwrap();
-        a.add_clean_parent(b);
+            ensure_height_increases(b, c).unwrap();
+            b.add_clean_parent(c);
+            ensure_height_increases(c, e).unwrap();
+            c.add_clean_parent(e);
+            ensure_height_increases(b, d).unwrap();
+            b.add_clean_parent(d);
+            ensure_height_increases(d, e).unwrap();
+            d.add_clean_parent(e);
+            ensure_height_increases(a, b).unwrap();
+            a.add_clean_parent(b);
+        })
     }
 
     #[test]
     fn test_insert_pop() {
         let graph = Graph2::new(10);
+        graph.with(|guard| {
+            let a = guard.insert_testing_guard();
+            set_min_height(a, 0).unwrap();
+            let b = guard.insert_testing_guard();
+            set_min_height(b, 5).unwrap();
+            let c = guard.insert_testing_guard();
+            set_min_height(c, 3).unwrap();
+            let d = guard.insert_testing_guard();
+            set_min_height(d, 4).unwrap();
+            let e = guard.insert_testing_guard();
+            set_min_height(e, 1).unwrap();
+            let e2 = guard.insert_testing_guard();
+            set_min_height(e2, 1).unwrap();
+            let e3 = guard.insert_testing_guard();
+            set_min_height(e3, 1).unwrap();
 
-        let a = graph.insert_testing_guard();
-        set_min_height(a, 0).unwrap();
-        let b = graph.insert_testing_guard();
-        set_min_height(b, 5).unwrap();
-        let c = graph.insert_testing_guard();
-        set_min_height(c, 3).unwrap();
-        let d = graph.insert_testing_guard();
-        set_min_height(d, 4).unwrap();
-        let e = graph.insert_testing_guard();
-        set_min_height(e, 1).unwrap();
-        let e2 = graph.insert_testing_guard();
-        set_min_height(e2, 1).unwrap();
-        let e3 = graph.insert_testing_guard();
-        set_min_height(e3, 1).unwrap();
+            guard.queue_recalc(a);
+            guard.queue_recalc(a);
+            guard.queue_recalc(a);
+            guard.queue_recalc(b);
+            guard.queue_recalc(c);
+            guard.queue_recalc(d);
 
-        graph.queue_recalc(a);
-        graph.queue_recalc(a);
-        graph.queue_recalc(a);
-        graph.queue_recalc(b);
-        graph.queue_recalc(c);
-        graph.queue_recalc(d);
+            assert_eq!(Some(a), guard.recalc_pop_next().map(|(_, v)| v));
+            assert_eq!(Some(c), guard.recalc_pop_next().map(|(_, v)| v));
+            assert_eq!(Some(d), guard.recalc_pop_next().map(|(_, v)| v));
 
-        assert_eq!(Some(a), graph.recalc_pop_next().map(|(_, v)| v));
-        assert_eq!(Some(c), graph.recalc_pop_next().map(|(_, v)| v));
-        assert_eq!(Some(d), graph.recalc_pop_next().map(|(_, v)| v));
+            guard.queue_recalc(e);
+            guard.queue_recalc(e2);
+            guard.queue_recalc(e3);
 
-        graph.queue_recalc(e);
-        graph.queue_recalc(e2);
-        graph.queue_recalc(e3);
+            assert_eq!(Some(e3), guard.recalc_pop_next().map(|(_, v)| v));
+            assert_eq!(Some(e2), guard.recalc_pop_next().map(|(_, v)| v));
+            assert_eq!(Some(e), guard.recalc_pop_next().map(|(_, v)| v));
+            assert_eq!(Some(b), guard.recalc_pop_next().map(|(_, v)| v));
 
-        assert_eq!(Some(e3), graph.recalc_pop_next().map(|(_, v)| v));
-        assert_eq!(Some(e2), graph.recalc_pop_next().map(|(_, v)| v));
-        assert_eq!(Some(e), graph.recalc_pop_next().map(|(_, v)| v));
-        assert_eq!(Some(b), graph.recalc_pop_next().map(|(_, v)| v));
-
-        assert_eq!(None, graph.recalc_pop_next().map(|(_, v)| v));
+            assert_eq!(None, guard.recalc_pop_next().map(|(_, v)| v));
+        })
     }
 
     #[test]
     #[should_panic]
     fn test_insert_above_max_height() {
         let graph = Graph2::new(10);
-        let a = graph.insert_testing_guard();
-        set_min_height(a, 10).unwrap();
-        graph.queue_recalc(a);
+        graph.with(|guard| {
+            let a = guard.insert_testing_guard();
+            set_min_height(a, 10).unwrap();
+            guard.queue_recalc(a);
+        })
     }
 
     #[test]
