@@ -88,7 +88,7 @@ pub struct NodePtrs {
     clean_parent0: Cell<Option<NodePtr>>,
     clean_parents: RefCell<Vec<NodePtr>>,
 
-    free_head: *const Cell<Option<NodePtr>>,
+    graph: *const Graph2,
 
     /// Next node in either recalc linked list for this height, or if node is in the free list, the free linked list.
     /// If this is the last node, None.
@@ -412,7 +412,7 @@ impl Graph2 {
                 node.anchor.replace(Some(anchor));
                 node
             } else {
-                let mut node = Node {
+                let node = Node {
                     observed: Cell::new(false),
                     visited: Cell::new(false),
                     necessary_count: Cell::new(0),
@@ -420,13 +420,13 @@ impl Graph2 {
                     ptrs: NodePtrs {
                         clean_parent0: Cell::new(None),
                         clean_parents: RefCell::new(vec![]),
+                        graph: &*self,
                         next: Cell::new(None),
                         prev: Cell::new(None),
                         recalc_state: Cell::new(RecalcState::Needed),
                         necessary_children: RefCell::new(vec![]),
                         height: Cell::new(0),
                         handle_count: Cell::new(1),
-                        free_head: &*self.free_head,
                     },
                     debug_info: Cell::new(debug_info),
                     last_ready: Cell::new(None),
@@ -487,39 +487,47 @@ fn set_min_height<'a>(node: NodeGuard<'a>, min_height: usize) -> Result<(), ()> 
     Ok(())
 }
 
-fn dequeue_calc<'a>(guard: NodeGuard<'a>) {
-    if guard.ptrs.recalc_state.get() != RecalcState::Pending {
+fn dequeue_calc<'a>(graph: &Graph2, node: NodeGuard<'a>) {
+    if node.ptrs.recalc_state.get() != RecalcState::Pending {
         return;
     }
-    if let Some(prev) = guard.ptrs.prev.get() {
+    if let Some(prev) = node.ptrs.prev.get() {
         unsafe { prev.lookup_unchecked() }
             .ptrs
             .next
-            .set(guard.ptrs.next.get());
+            .set(node.ptrs.next.get());
     } else {
         // node was first in queue, need to set queue head to next
-        unimplemented!()
+        let mut recalc_queues = graph.recalc_queues.borrow_mut();
+        let height = node.ptrs.height.get();
+        let next = node.ptrs.next.get();
+        assert_eq!(
+            recalc_queues[height].map(|ptr| unsafe { ptr.lookup_unchecked() }),
+            Some(node.0)
+        );
+        recalc_queues[height] = next;
     }
 
-    if let Some(next) = guard.ptrs.next.get() {
+    if let Some(next) = node.ptrs.next.get() {
         unsafe { next.lookup_unchecked() }
             .ptrs
             .next
-            .set(guard.ptrs.prev.get());
+            .set(node.ptrs.prev.get());
     }
 
-    guard.ptrs.prev.set(None);
-    guard.ptrs.next.set(None);
+    node.ptrs.prev.set(None);
+    node.ptrs.next.set(None);
 }
 
 unsafe fn free(ptr: NodePtr) {
     let guard = NodeGuard(ptr.lookup_unchecked());
     let _ = guard.drain_necessary_children();
     let _ = guard.drain_clean_parents();
-    dequeue_calc(guard);
+    let graph = &*(*guard).ptrs.graph;
+    dequeue_calc(graph, guard);
     // TODO clear out this node with default empty data
     // TODO add node to chain of free nodes
-    let free_head = &*guard.ptrs.free_head;
+    let free_head = &graph.free_head;
     let old_free = free_head.get();
     if let Some(old_free) = old_free {
         guard.0.lookup_ptr(old_free).ptrs.prev.set(Some(ptr));
