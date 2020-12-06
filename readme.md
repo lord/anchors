@@ -6,11 +6,11 @@
 
 ## Features
 
-- hybrid graph allows both [Adapton](https://github.com/Adapton/adapton.rust)-style and [Incremental](https://github.com/janestreet/incremental)-style push updates
-- cloning values in the graph is almost always optional
-- still a work in progress w big performance issues, but should be ""functional""
+- Hybrid graph allows both [Adapton](https://github.com/Adapton/adapton.rust)-style and [Incremental](https://github.com/janestreet/incremental)-style push updates. For more information on the internals, you can view the [accompanying blog post](https://lord.io/blog/2020/spreadsheets/).
+- Cloning values in the graph is almost always optional. `map` and `then` closures receive immutable references, and return owned values. Alternatively, a `refmap` closure receives an immutable reference, and returns an immutable reference.
+- Still a work in progress, but should be functional (lol) and half-decently fast. Still, expect for there to be major API changes over the next several years.
 
-## example
+## Example
 
 ```rust
 // example
@@ -61,7 +61,7 @@ my_unread_updater.set(50);
 assert_eq!(engine.get(&dynamic_name), "Robo");
 ```
 
-## observed nodes
+## Observed nodes
 
 You can tell the engine you'd like a node to be observed:
 
@@ -74,9 +74,70 @@ Now when you request it, it will [avoid traversing the entire graph quite as fre
 - any time you `get` *any* `Anchor`, all observed nodes will be brought up to date.
 - if one of an observed dependencies is a `then`, nodes requested by it [may be recomputed](https://gist.github.com/khooyp/98abc0e64dc296deaa48), even though they aren't strictly necessary.
 
-## see also
+## How fast is it?
+
+You can check out the `bench` folder for some microbenchmarks. These are the results of running `stabilize_linear_nodes_simple`, a linear chain of many `map` nodes each adding `1` to some changing input number. Benchmarks run on my Macbook Air (Intel, 2020) against Anchors 0.5.0 `8c9801c`, with `lto = true`.
+
+<table>
+  <tr>
+    <th>node count</th>
+    <th>used `mark_observed`?</th>
+    <th>total time to `get` end of chain</th>
+    <th>total time / node count</th>
+  </tr>
+
+  <tr>
+    <td>10</td>
+    <td>observed</td>
+    <td>[485.48 ns 491.85 ns 498.49 ns]</td>
+    <td>49.185 ns</td>
+  </tr>
+
+  <tr>
+    <td>100</td>
+    <td>observed</td>
+    <td>[4.1734 us 4.2525 us 4.3345 us]</td>
+    <td>42.525 ns</td>
+  </tr>
+
+  <tr>
+    <td>1000</td>
+    <td>observed</td>
+    <td>[42.720 us 43.456 us 44.200 us]</td>
+    <td>43.456 ns</td>
+  </tr>
+
+  <tr>
+    <td>10</td>
+    <td>unobserved</td>
+    <td>[738.02 ns 752.40 ns 767.86 ns]</td>
+    <td>75.240 ns</td>
+  </tr>
+
+
+  <tr>
+    <td>100</td>
+    <td>unobserved</td>
+    <td>[6.5952 us 6.7178 us 6.8499 us]</td>
+    <td>67.178 ns</td>
+  </tr>
+
+  <tr>
+    <td>1000</td>
+    <td>unobserved</td>
+    <td>[74.256 us 75.360 us 76.502 us]</td>
+    <td>75.360 ns</td>
+  </tr>
+</table>
+
+Very roughly, it looks like observed nodes have an overhead of at around `~42-50ns` each, and unobserved nodes around `74-76ns` each. This could be pretty aggressively improved; ideally we could drop these numbers to the `~15ns` per observed node that [Incremental achieves](https://github.com/janestreet/incr_map/blob/master/bench/src/linear.ml).
+
+Also worth mentioning for any incremental program, the slowdowns will probably come from other aspects of the framework that aren't measured with this very simple microbenchmark.
+
+## See Also
 
 - https://github.com/Adapton/adapton.rust
 - https://github.com/janestreet/incremental
 - https://github.com/observablehq/runtime
 - https://github.com/salsa-rs/salsa
+- https://github.com/MaterializeInc/materialize
