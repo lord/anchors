@@ -144,7 +144,11 @@ impl Engine {
 
     /// Retrieves the value of an Anchor, recalculating dependencies as necessary to get the
     /// latest value.
-    pub fn get<'out, O: Clone + 'static>(&mut self, anchor: &Anchor<O, Engine>) -> O {
+    pub fn get<'out, O>(&mut self, anchor: &Anchor<O, Engine>) -> O::Output
+    where
+        O: AnchorInner<Engine>,
+        O::Output: Clone + 'static,
+    {
         // stabilize once before, since the stabilization process may mark our requested node
         // as dirty
         self.stabilize();
@@ -163,7 +167,7 @@ impl Engine {
                 .as_ref()
                 .unwrap()
                 .output(&mut EngineContext { engine: &self })
-                .downcast_ref::<O>()
+                .downcast_ref::<O::Output>()
                 .unwrap()
                 .clone()
         })

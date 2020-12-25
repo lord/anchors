@@ -41,7 +41,7 @@ pub trait AnchorExt<E: Engine>: Sized {
     /// let b = Constant::new(2);
     ///
     /// // add the two numbers together; types have been added for clarity but are optional:
-    /// let res: Anchor<usize, Engine> = (&a, &b).map(|a_val: &usize, b_val: &usize| -> usize {
+    /// let res = (&a, &b).map(|a_val: &usize, b_val: &usize| -> usize {
     ///    *a_val+*b_val
     /// });
     ///
@@ -83,7 +83,7 @@ pub trait AnchorExt<E: Engine>: Sized {
     /// let b = num.map(|num| *num + 2);
     ///
     /// // types have been added for clarity but are optional:
-    /// let res: Anchor<usize, Engine> = decision.then(move |decision: &bool| {
+    /// let res = decision.then(move |decision: &bool| {
     ///     if *decision {
     ///         a.clone()
     ///     } else {
@@ -93,11 +93,11 @@ pub trait AnchorExt<E: Engine>: Sized {
     ///
     /// assert_eq!(2, engine.get(&res));
     /// ```
-    // fn then<F, Out>(self, f: F) -> Anchor<then::Then<Self::Target, Out, F, E>, E>
-    // where
-    //     F: 'static,
-    //     Out: 'static,
-    //     then::Then<Self::Target, Out, F, E>: AnchorInner<E, Output = Out>;
+    fn then<F, Out>(self, f: F) -> Anchor<then::Then<Self::Target, Out, F, E>, E>
+    where
+        F: 'static,
+        Out: 'static,
+        then::Then<Self::Target, Out, F, E>: AnchorInner<E>;
 
     /// Creates an Anchor that outputs its input. However, even if a value changes
     /// you may not want to recompute downstream nodes unless the value changes substantially.
@@ -156,7 +156,7 @@ pub trait AnchorExt<E: Engine>: Sized {
     /// let tuple = Constant::new((CantClone{val: 1}, CantClone{val: 2}));
     ///
     /// // lookup the first value inside the tuple; types have been added for clarity but are optional:
-    /// let res: Anchor<CantClone, Engine> = tuple.refmap(|tuple: &(CantClone, CantClone)| -> &CantClone {
+    /// let res = tuple.refmap(|tuple: &(CantClone, CantClone)| -> &CantClone {
     ///    &tuple.0
     /// });
     ///
@@ -218,21 +218,22 @@ where
         })
     }
 
-    // #[track_caller]
-    // fn then<F, Out>(self, f: F) -> Anchor<then::Then<Self::Target, Out, F, E>, E>
-    // where
-    //     F: 'static,
-    //     Out: 'static,
-    //     then::Then<Self::Target, Out, F, E>: AnchorInner<E, Output = Out>,
-    // {
-    //     E::mount(then::Then {
-    //         anchors: (self.clone(),),
-    //         f,
-    //         f_anchor: None,
-    //         location: Location::caller(),
-    //         lhs_stale: true,
-    //     })
-    // }
+    #[track_caller]
+    fn then<F, Out>(self, f: F) -> Anchor<then::Then<Self::Target, Out, F, E>, E>
+    where
+        F: 'static,
+        Out: 'static,
+        then::Then<Self::Target, Out, F, E>: AnchorInner<E>,
+    {
+        E::mount(then::Then {
+            anchors: (self.clone(),),
+            f,
+            f_anchor: None,
+            phantom_output: std::marker::PhantomData,
+            location: Location::caller(),
+            lhs_stale: true,
+        })
+    }
 
     #[track_caller]
     fn refmap<F, Out>(self, f: F) -> Anchor<refmap::RefMap<Self::Target, F>, E>
@@ -265,8 +266,9 @@ where
 
 macro_rules! impl_tuple_ext {
     ($([$output_type:ident, $num:tt])+) => {
-        // impl <$($output_type,)+ E> AnchorSplit<E> for Anchor<($($output_type,)+), E>
+        // impl <I, $($output_type,)+ E> AnchorSplit<E> for Anchor<I, E>
         // where
+        //     I: AnchorInner<E, Output=($($output_type,)+)>,
         //     $(
         //         $output_type: Clone + PartialEq + 'static,
         //     )+
@@ -322,21 +324,22 @@ macro_rules! impl_tuple_ext {
                 })
             }
 
-            // #[track_caller]
-            // fn then<F, Out>(self, f: F) -> Anchor<Out, E>
-            // where
-            //     F: 'static,
-            //     Out: 'static,
-            //     then::Then<Self::Target, Out, F, E>: AnchorInner<E, Output=Out>,
-            // {
-            //     E::mount(then::Then {
-            //         anchors: ($(self.$num.clone(),)+),
-            //         f,
-            //         f_anchor: None,
-            //         location: Location::caller(),
-            //         lhs_stale: true,
-            //     })
-            // }
+            #[track_caller]
+            fn then<F, Out>(self, f: F) -> Anchor<then::Then<Self::Target, Out, F, E>, E>
+            where
+                F: 'static,
+                Out: 'static,
+                then::Then<Self::Target, Out, F, E>: AnchorInner<E>,
+            {
+                E::mount(then::Then {
+                    anchors: ($(self.$num.clone(),)+),
+                    f,
+                    f_anchor: None,
+                    phantom_output: std::marker::PhantomData,
+                    location: Location::caller(),
+                    lhs_stale: true,
+                })
+            }
 
             #[track_caller]
             fn refmap<F, Out>(self, f: F) -> Anchor<refmap::RefMap<Self::Target, F>, E>
