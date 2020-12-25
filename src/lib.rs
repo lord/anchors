@@ -41,7 +41,7 @@ pub struct Anchor<I, E: Engine + ?Sized> {
     phantom: PhantomData<I>,
 }
 
-impl<I, E: Engine> Anchor<I, E> {
+impl<I, E: Engine + ?Sized> Anchor<I, E> {
     fn new(data: E::AnchorHandle) -> Self {
         Self {
             data,
@@ -52,6 +52,14 @@ impl<I, E: Engine> Anchor<I, E> {
     /// Returns the immutable, copyable, hashable, comparable engine-specific ID for this Anchor.
     pub fn token(&self) -> <E::AnchorHandle as AnchorHandle>::Token {
         self.data.token()
+    }
+
+    pub fn into_untyped_handle(self) -> E::AnchorHandle {
+        self.data
+    }
+
+    pub fn untyped_handle(&self) -> &E::AnchorHandle {
+        &self.data
     }
 }
 
@@ -112,6 +120,19 @@ pub trait OutputContext<'eng> {
         anchor: &Anchor<I, Self::Engine>,
     ) -> &'out I::Output
     where
+        'eng: 'out,
+    {
+        let output: &I::Output = unsafe { self.get_untyped(anchor.untyped_handle()) }
+            .downcast_ref()
+            .unwrap();
+        output
+    }
+
+    unsafe fn get_untyped<'out>(
+        &self,
+        anchor_handle: &<Self::Engine as Engine>::AnchorHandle,
+    ) -> &'out dyn std::any::Any
+    where
         'eng: 'out;
 }
 
@@ -125,6 +146,19 @@ pub trait UpdateContext {
         &'slf self,
         anchor: &Anchor<I, Self::Engine>,
     ) -> &'out I::Output
+    where
+        'slf: 'out,
+    {
+        let output: &I::Output = unsafe { self.get_untyped(anchor.untyped_handle()) }
+            .downcast_ref()
+            .unwrap();
+        output
+    }
+
+    unsafe fn get_untyped<'out, 'slf>(
+        &'slf self,
+        anchor_handle: &<Self::Engine as Engine>::AnchorHandle,
+    ) -> &'out dyn std::any::Any
     where
         'slf: 'out;
 

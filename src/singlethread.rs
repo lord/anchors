@@ -362,28 +362,21 @@ struct EngineContextMut<'eng, 'gg> {
 impl<'eng> OutputContext<'eng> for EngineContext<'eng> {
     type Engine = Engine;
 
-    fn get<'out, I: AnchorInner<Self::Engine> + 'static>(
-        &self,
-        anchor: &Anchor<I, Self::Engine>,
-    ) -> &'out I::Output
+    unsafe fn get_untyped<'out>(&self, anchor_handle: &AnchorHandle) -> &'out dyn std::any::Any
     where
         'eng: 'out,
     {
         self.engine.graph.with(|graph| {
-            let node = graph.get(anchor.token()).unwrap();
+            let node = graph
+                .get(crate::AnchorHandle::token(anchor_handle))
+                .unwrap();
             if graph2::recalc_state(node) != RecalcState::Ready {
                 panic!("attempted to get node that was not previously requested")
             }
             let unsafe_borrow = unsafe { node.anchor.as_ptr().as_ref().unwrap() };
-            let output: &I::Output = unsafe_borrow
-                .as_ref()
-                .unwrap()
-                .output(&mut EngineContext {
-                    engine: self.engine,
-                })
-                .downcast_ref()
-                .unwrap();
-            output
+            unsafe_borrow.as_ref().unwrap().output(&mut EngineContext {
+                engine: self.engine,
+            })
         })
     }
 }
@@ -391,29 +384,25 @@ impl<'eng> OutputContext<'eng> for EngineContext<'eng> {
 impl<'eng, 'gg> UpdateContext for EngineContextMut<'eng, 'gg> {
     type Engine = Engine;
 
-    fn get<'out, 'slf, I: AnchorInner<Self::Engine> + 'static>(
+    unsafe fn get_untyped<'out, 'slf>(
         &'slf self,
-        anchor: &Anchor<I, Self::Engine>,
-    ) -> &'out I::Output
+        anchor_handle: &AnchorHandle,
+    ) -> &'out dyn std::any::Any
     where
         'slf: 'out,
     {
         self.engine.graph.with(|graph| {
-            let node = graph.get(anchor.token()).unwrap();
+            let node = graph
+                .get(crate::AnchorHandle::token(anchor_handle))
+                .unwrap();
             if graph2::recalc_state(node) != RecalcState::Ready {
                 panic!("attempted to get node that was not previously requested")
             }
 
             let unsafe_borrow = unsafe { node.anchor.as_ptr().as_ref().unwrap() };
-            let output: &I::Output = unsafe_borrow
-                .as_ref()
-                .unwrap()
-                .output(&mut EngineContext {
-                    engine: self.engine,
-                })
-                .downcast_ref()
-                .unwrap();
-            output
+            unsafe_borrow.as_ref().unwrap().output(&mut EngineContext {
+                engine: self.engine,
+            })
         })
     }
 
