@@ -5,7 +5,7 @@ mod cutoff;
 mod map;
 mod map_mut;
 mod refmap;
-mod then;
+// mod then;
 
 /// A trait automatically implemented for all Anchors.
 /// You'll likely want to `use` this trait in most of your programs, since it can create many
@@ -47,13 +47,17 @@ pub trait AnchorExt<E: Engine>: Sized {
     ///
     /// assert_eq!(3, engine.get(&res));
     /// ```
-    fn map<F, Out>(self, f: F) -> Anchor<Out, E>
+    fn map<F, Out>(self, f: F) -> Anchor<map::Map<Self::Target, F, Out>, E>
     where
         Out: 'static,
         F: 'static,
         map::Map<Self::Target, F, Out>: AnchorInner<E, Output = Out>;
 
-    fn map_mut<F, Out>(self, initial: Out, f: F) -> Anchor<Out, E>
+    fn map_mut<F, Out>(
+        self,
+        initial: Out,
+        f: F,
+    ) -> Anchor<map_mut::MapMut<Self::Target, F, Out>, E>
     where
         Out: 'static,
         F: 'static,
@@ -89,11 +93,11 @@ pub trait AnchorExt<E: Engine>: Sized {
     ///
     /// assert_eq!(2, engine.get(&res));
     /// ```
-    fn then<F, Out>(self, f: F) -> Anchor<Out, E>
-    where
-        F: 'static,
-        Out: 'static,
-        then::Then<Self::Target, Out, F, E>: AnchorInner<E, Output = Out>;
+    // fn then<F, Out>(self, f: F) -> Anchor<then::Then<Self::Target, Out, F, E>, E>
+    // where
+    //     F: 'static,
+    //     Out: 'static,
+    //     then::Then<Self::Target, Out, F, E>: AnchorInner<E, Output = Out>;
 
     /// Creates an Anchor that outputs its input. However, even if a value changes
     /// you may not want to recompute downstream nodes unless the value changes substantially.
@@ -131,7 +135,7 @@ pub trait AnchorExt<E: Engine>: Sized {
     /// set_num.set(11);
     /// assert_eq!(12, engine.get(&res));
     /// ```
-    fn cutoff<F, Out>(self, _f: F) -> Anchor<Out, E>
+    fn cutoff<F, Out>(self, _f: F) -> Anchor<cutoff::Cutoff<Self::Target, F>, E>
     where
         Out: 'static,
         F: 'static,
@@ -163,7 +167,7 @@ pub trait AnchorExt<E: Engine>: Sized {
     ///
     /// assert_eq!(true, engine.get(&is_one));
     /// ```
-    fn refmap<F, Out>(self, _f: F) -> Anchor<Out, E>
+    fn refmap<F, Out>(self, _f: F) -> Anchor<refmap::RefMap<Self::Target, F>, E>
     where
         Out: 'static,
         F: 'static,
@@ -183,7 +187,7 @@ where
     type Target = (Anchor<O1, E>,);
 
     #[track_caller]
-    fn map<F, Out>(self, f: F) -> Anchor<Out, E>
+    fn map<F, Out>(self, f: F) -> Anchor<map::Map<Self::Target, F, Out>, E>
     where
         Out: 'static,
         F: 'static,
@@ -199,7 +203,7 @@ where
     }
 
     #[track_caller]
-    fn map_mut<F, Out>(self, initial: Out, f: F) -> Anchor<Out, E>
+    fn map_mut<F, Out>(self, initial: Out, f: F) -> Anchor<map_mut::MapMut<Self::Target, F, Out>, E>
     where
         Out: 'static,
         F: 'static,
@@ -214,24 +218,24 @@ where
         })
     }
 
-    #[track_caller]
-    fn then<F, Out>(self, f: F) -> Anchor<Out, E>
-    where
-        F: 'static,
-        Out: 'static,
-        then::Then<Self::Target, Out, F, E>: AnchorInner<E, Output = Out>,
-    {
-        E::mount(then::Then {
-            anchors: (self.clone(),),
-            f,
-            f_anchor: None,
-            location: Location::caller(),
-            lhs_stale: true,
-        })
-    }
+    // #[track_caller]
+    // fn then<F, Out>(self, f: F) -> Anchor<then::Then<Self::Target, Out, F, E>, E>
+    // where
+    //     F: 'static,
+    //     Out: 'static,
+    //     then::Then<Self::Target, Out, F, E>: AnchorInner<E, Output = Out>,
+    // {
+    //     E::mount(then::Then {
+    //         anchors: (self.clone(),),
+    //         f,
+    //         f_anchor: None,
+    //         location: Location::caller(),
+    //         lhs_stale: true,
+    //     })
+    // }
 
     #[track_caller]
-    fn refmap<F, Out>(self, f: F) -> Anchor<Out, E>
+    fn refmap<F, Out>(self, f: F) -> Anchor<refmap::RefMap<Self::Target, F>, E>
     where
         Out: 'static,
         F: 'static,
@@ -245,7 +249,7 @@ where
     }
 
     #[track_caller]
-    fn cutoff<F, Out>(self, f: F) -> Anchor<Out, E>
+    fn cutoff<F, Out>(self, f: F) -> Anchor<cutoff::Cutoff<Self::Target, F>, E>
     where
         Out: 'static,
         F: 'static,
@@ -261,21 +265,21 @@ where
 
 macro_rules! impl_tuple_ext {
     ($([$output_type:ident, $num:tt])+) => {
-        impl <$($output_type,)+ E> AnchorSplit<E> for Anchor<($($output_type,)+), E>
-        where
-            $(
-                $output_type: Clone + PartialEq + 'static,
-            )+
-            E: Engine,
-        {
-            type Target = ($(Anchor<$output_type, E>,)+);
+        // impl <$($output_type,)+ E> AnchorSplit<E> for Anchor<($($output_type,)+), E>
+        // where
+        //     $(
+        //         $output_type: Clone + PartialEq + 'static,
+        //     )+
+        //     E: Engine,
+        // {
+        //     type Target = ($(Anchor<$output_type, E>,)+);
 
-            fn split(&self) -> Self::Target {
-                ($(
-                    self.refmap(|v| &v.$num),
-                )+)
-            }
-        }
+        //     fn split(&self) -> Self::Target {
+        //         ($(
+        //             self.refmap(|v| &v.$num),
+        //         )+)
+        //     }
+        // }
 
         impl<$($output_type,)+ E> AnchorExt<E> for ($(&Anchor<$output_type, E>,)+)
         where
@@ -287,7 +291,7 @@ macro_rules! impl_tuple_ext {
             type Target = ($(Anchor<$output_type, E>,)+);
 
             #[track_caller]
-            fn map<F, Out>(self, f: F) -> Anchor<Out, E>
+            fn map<F, Out>(self, f: F) -> Anchor<map::Map<Self::Target, F, Out>, E>
             where
                 Out: 'static,
                 F: 'static,
@@ -303,7 +307,7 @@ macro_rules! impl_tuple_ext {
             }
 
             #[track_caller]
-            fn map_mut<F, Out>(self, initial: Out, f: F) -> Anchor<Out, E>
+            fn map_mut<F, Out>(self, initial: Out, f: F) -> Anchor<map_mut::MapMut<Self::Target, F, Out>, E>
             where
                 Out: 'static,
                 F: 'static,
@@ -318,24 +322,24 @@ macro_rules! impl_tuple_ext {
                 })
             }
 
-            #[track_caller]
-            fn then<F, Out>(self, f: F) -> Anchor<Out, E>
-            where
-                F: 'static,
-                Out: 'static,
-                then::Then<Self::Target, Out, F, E>: AnchorInner<E, Output=Out>,
-            {
-                E::mount(then::Then {
-                    anchors: ($(self.$num.clone(),)+),
-                    f,
-                    f_anchor: None,
-                    location: Location::caller(),
-                    lhs_stale: true,
-                })
-            }
+            // #[track_caller]
+            // fn then<F, Out>(self, f: F) -> Anchor<Out, E>
+            // where
+            //     F: 'static,
+            //     Out: 'static,
+            //     then::Then<Self::Target, Out, F, E>: AnchorInner<E, Output=Out>,
+            // {
+            //     E::mount(then::Then {
+            //         anchors: ($(self.$num.clone(),)+),
+            //         f,
+            //         f_anchor: None,
+            //         location: Location::caller(),
+            //         lhs_stale: true,
+            //     })
+            // }
 
             #[track_caller]
-            fn refmap<F, Out>(self, f: F) -> Anchor<Out, E>
+            fn refmap<F, Out>(self, f: F) -> Anchor<refmap::RefMap<Self::Target, F>, E>
             where
                 Out: 'static,
                 F: 'static,
@@ -349,7 +353,7 @@ macro_rules! impl_tuple_ext {
             }
 
             #[track_caller]
-            fn cutoff<F, Out>(self, f: F) -> Anchor<Out, E>
+            fn cutoff<F, Out>(self, f: F) -> Anchor<cutoff::Cutoff<Self::Target, F>, E>
             where
                 Out: 'static,
                 F: 'static,

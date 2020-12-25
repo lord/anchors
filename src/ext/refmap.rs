@@ -7,10 +7,12 @@ pub struct RefMap<A, F> {
     pub(super) location: &'static Location<'static>,
 }
 
-impl<F, In: 'static, Out: 'static, E> AnchorInner<E> for RefMap<(Anchor<In, E>,), F>
+impl<F, In, Out, E> AnchorInner<E> for RefMap<(Anchor<In, E>,), F>
 where
+    In: AnchorInner<E> + 'static,
+    Out: 'static,
     E: Engine,
-    F: for<'any> Fn(&'any In) -> &'any Out,
+    F: for<'any> Fn(&'any In::Output) -> &'any Out,
 {
     type Output = Out;
 

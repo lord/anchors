@@ -3,8 +3,8 @@
 use std::marker::PhantomData;
 use std::panic::Location;
 
-// mod ext;
-// pub use ext::AnchorExt;
+mod ext;
+pub use ext::AnchorExt;
 mod constant;
 pub mod singlethread;
 mod var;

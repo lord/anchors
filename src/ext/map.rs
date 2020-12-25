@@ -14,10 +14,10 @@ macro_rules! impl_tuple_map {
         impl<$($output_type,)+ E, F, Out> AnchorInner<E> for
             Map<($(Anchor<$output_type, E>,)+), F, Out>
         where
-            F: for<'any> FnMut($(&'any $output_type),+) -> Out,
+            F: for<'any> FnMut($(&'any $output_type::Output),+) -> Out,
             Out: PartialEq + 'static,
             $(
-                $output_type: 'static,
+                $output_type: AnchorInner<E> + 'static,
             )+
             E: Engine,
         {

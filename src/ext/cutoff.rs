@@ -7,12 +7,13 @@ pub struct Cutoff<A, F> {
     pub(super) location: &'static Location<'static>,
 }
 
-impl<F, In: 'static, E> AnchorInner<E> for Cutoff<(Anchor<In, E>,), F>
+impl<F, In, E> AnchorInner<E> for Cutoff<(Anchor<In, E>,), F>
 where
+    In: AnchorInner<E> + 'static,
     E: Engine,
-    F: for<'any> FnMut(&'any In) -> bool,
+    F: for<'any> FnMut(&'any In::Output) -> bool,
 {
-    type Output = In;
+    type Output = In::Output;
 
     fn dirty(&mut self, _edge: &<E::AnchorHandle as AnchorHandle>::Token) {
         // noop
