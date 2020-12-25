@@ -3,7 +3,8 @@ use std::panic::Location;
 
 pub struct Then<A, Out, F, E: Engine> {
     pub(super) f: F,
-    pub(super) f_anchor: Option<Anchor<Out, E>>,
+    pub(super) f_anchor: Option<E::AnchorHandle>,
+    pub(super) phantom_output: std::marker::PhantomData<Out>,
     pub(super) lhs_stale: bool,
     pub(super) anchors: A,
     pub(super) location: &'static Location<'static>,
@@ -14,14 +15,14 @@ macro_rules! impl_tuple_then {
         impl<$($output_type,)+ E, F, Out> AnchorInner<E> for
             Then<( $(Anchor<$output_type, E>,)+ ), Out, F, E>
         where
-            F: for<'any> FnMut($(&'any $output_type),+) -> Anchor<Out, E>,
-            Out: 'static,
+            F: for<'any> FnMut($(&'any $output_type::Output),+) -> Anchor<Out, E>,
+            Out: AnchorInner<E> + 'static,
             $(
-                $output_type: 'static,
+                $output_type: AnchorInner<E> + 'static,
             )+
             E: Engine,
         {
-            type Output = Out;
+            type Output = Out::Output;
             fn dirty(&mut self, edge: &<E::AnchorHandle as AnchorHandle>::Token) {
                 $(
                     // only invalidate f_anchor if one of the lhs anchors is invalidated
@@ -40,7 +41,7 @@ macro_rules! impl_tuple_then {
                     let mut found_updated = false;
 
                     $(
-                        match ctx.request(&self.anchors.$num, true) {
+                        match ctx.request(&self.anchors.$num.handle(), true) {
                             Poll::Pending => {
                                 found_pending = true;
                             }
@@ -60,9 +61,9 @@ macro_rules! impl_tuple_then {
                     self.lhs_stale = false;
 
                     if self.f_anchor.is_none() || found_updated {
-                        let new_anchor = (self.f)($(&ctx.get(&self.anchors.$num)),+);
+                        let new_anchor = (self.f)($(&ctx.get(&self.anchors.$num)),+).into_handle();
                         match self.f_anchor.as_ref() {
-                            Some(outdated_anchor) if outdated_anchor != &new_anchor => {
+                            Some(outdated_anchor) if outdated_anchor.token() != new_anchor.token() => {
                                 // changed, so unfollow old
                                 ctx.unrequest(outdated_anchor);
                             }
@@ -82,7 +83,7 @@ macro_rules! impl_tuple_then {
             where
                 'slf: 'out,
             {
-                &ctx.get(&self.f_anchor.as_ref().unwrap())
+                unsafe {&ctx.get_untyped(&self.f_anchor.as_ref().unwrap())}.downcast_ref().unwrap()
             }
 
             fn debug_location(&self) -> Option<(&'static str, &'static Location<'static>)> {

@@ -406,12 +406,11 @@ impl<'eng, 'gg> UpdateContext for EngineContextMut<'eng, 'gg> {
         })
     }
 
-    fn request<'out, I: AnchorInner<Self::Engine> + 'static>(
-        &mut self,
-        anchor: &Anchor<I, Self::Engine>,
-        necessary: bool,
-    ) -> Poll {
-        let child = self.graph.get(anchor.token()).unwrap();
+    fn request(&mut self, anchor_handle: &AnchorHandle, necessary: bool) -> Poll {
+        let child = self
+            .graph
+            .get(crate::AnchorHandle::token(anchor_handle))
+            .unwrap();
         let height_already_increased = match graph2::ensure_height_increases(child, self.node) {
             Ok(v) => v,
             Err(()) => {
@@ -443,8 +442,11 @@ impl<'eng, 'gg> UpdateContext for EngineContextMut<'eng, 'gg> {
         }
     }
 
-    fn unrequest<'out, O: 'static>(&mut self, anchor: &Anchor<O, Self::Engine>) {
-        let child = self.graph.get(anchor.token()).unwrap();
+    fn unrequest(&mut self, anchor_handle: &AnchorHandle) {
+        let child = self
+            .graph
+            .get(crate::AnchorHandle::token(anchor_handle))
+            .unwrap();
         self.node.remove_necessary_child(child);
         Engine::update_necessary_children(child);
     }

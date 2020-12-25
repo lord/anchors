@@ -37,7 +37,7 @@ macro_rules! impl_tuple_map_mut {
                 let mut found_updated = false;
 
                 $(
-                    match ctx.request(&self.anchors.$num, true) {
+                    match ctx.request(&self.anchors.$num.handle(), true) {
                         Poll::Pending => {
                             found_pending = true;
                         }

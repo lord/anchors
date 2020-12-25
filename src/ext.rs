@@ -5,7 +5,7 @@ mod cutoff;
 mod map;
 mod map_mut;
 mod refmap;
-// mod then;
+mod then;
 
 /// A trait automatically implemented for all Anchors.
 /// You'll likely want to `use` this trait in most of your programs, since it can create many

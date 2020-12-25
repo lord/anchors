@@ -19,7 +19,7 @@ where
         // noop
     }
     fn poll_updated<G: UpdateContext<Engine = E>>(&mut self, ctx: &mut G) -> Poll {
-        let upstream_poll = ctx.request(&self.anchors.0, true);
+        let upstream_poll = ctx.request(&self.anchors.0.handle(), true);
         if upstream_poll != Poll::Updated {
             return upstream_poll;
         }

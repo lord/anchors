@@ -20,7 +20,7 @@ where
         // noop
     }
     fn poll_updated<G: UpdateContext<Engine = E>>(&mut self, ctx: &mut G) -> Poll {
-        ctx.request(&self.anchors.0, true)
+        ctx.request(&self.anchors.0.handle(), true)
     }
     fn output<'slf, 'out, G: OutputContext<'out, Engine = E>>(
         &'slf self,

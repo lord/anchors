@@ -54,11 +54,11 @@ impl<I, E: Engine + ?Sized> Anchor<I, E> {
         self.data.token()
     }
 
-    pub fn into_untyped_handle(self) -> E::AnchorHandle {
+    pub fn into_handle(self) -> E::AnchorHandle {
         self.data
     }
 
-    pub fn untyped_handle(&self) -> &E::AnchorHandle {
+    pub fn handle(&self) -> &E::AnchorHandle {
         &self.data
     }
 }
@@ -122,7 +122,7 @@ pub trait OutputContext<'eng> {
     where
         'eng: 'out,
     {
-        let output: &I::Output = unsafe { self.get_untyped(anchor.untyped_handle()) }
+        let output: &I::Output = unsafe { self.get_untyped(anchor.handle()) }
             .downcast_ref()
             .unwrap();
         output
@@ -149,7 +149,7 @@ pub trait UpdateContext {
     where
         'slf: 'out,
     {
-        let output: &I::Output = unsafe { self.get_untyped(anchor.untyped_handle()) }
+        let output: &I::Output = unsafe { self.get_untyped(anchor.handle()) }
             .downcast_ref()
             .unwrap();
         output
@@ -168,19 +168,16 @@ pub trait UpdateContext {
     ///
     /// `necessary` is a bit that indicates if we are necessary, `anchor` should be marked as necessary
     /// as well. If you don't know what this bit should be set to, you probably want a value of `true`.
-    fn request<'out, I: AnchorInner<Self::Engine> + 'static>(
+    fn request<'out>(
         &mut self,
-        anchor: &Anchor<I, Self::Engine>,
+        anchor_handle: &<Self::Engine as Engine>::AnchorHandle,
         necessary: bool,
     ) -> Poll;
 
     /// If `anchor` was previously passed to `request` and you no longer care about its output, you can
     /// pass it to `unrequest` so the engine will stop calling your `dirty` method when `anchor` changes.
     /// If `self` is necessary, this is also critical for ensuring `anchor` is no longer marked as necessary.
-    fn unrequest<'out, I: AnchorInner<Self::Engine> + 'static>(
-        &mut self,
-        anchor: &Anchor<I, Self::Engine>,
-    );
+    fn unrequest<'out>(&mut self, anchor_handle: &<Self::Engine as Engine>::AnchorHandle);
 
     /// Returns a new dirty handle, used for marking that `self`'s output may have changed through some
     /// non incremental means. For instance, perhaps this `AnchorInner`s value represents the current time, or
