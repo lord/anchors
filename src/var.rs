@@ -31,7 +31,7 @@ impl<T, H> Clone for VarSetter<T, H> {
 
 impl<T: 'static, H: DirtyHandle + 'static> Var<T, H> {
     /// Creates a new Var Anchor, returning a tuple of the new Anchor and its setter.
-    pub fn new<E: Engine<DirtyHandle = H>>(val: T) -> (Anchor<T, E>, VarSetter<T, H>) {
+    pub fn new<E: Engine<DirtyHandle = H>>(val: T) -> (Anchor<Self, E>, VarSetter<T, H>) {
         let inner = Rc::new(RefCell::new(VarInner {
             dirty_handle: None,
             val: None,

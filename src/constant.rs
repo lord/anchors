@@ -11,7 +11,7 @@ pub struct Constant<T> {
 impl<T: 'static> Constant<T> {
     /// Creates a new Constant Anchor from some value.
     #[track_caller]
-    pub fn new<E: Engine>(val: T) -> Anchor<T, E> {
+    pub fn new<E: Engine>(val: T) -> Anchor<Self, E> {
         E::mount(Self {
             val,
             first_poll: true,

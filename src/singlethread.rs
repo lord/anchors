@@ -73,7 +73,7 @@ impl crate::Engine for Engine {
     type AnchorHandle = AnchorHandle;
     type DirtyHandle = DirtyHandle;
 
-    fn mount<I: AnchorInner<Self> + 'static>(inner: I) -> Anchor<I::Output, Self> {
+    fn mount<I: AnchorInner<Self> + 'static>(inner: I) -> Anchor<I, Self> {
         DEFAULT_MOUNTER.with(|default_mounter| {
             let mut borrow1 = default_mounter.borrow_mut();
             let this = borrow1
@@ -362,7 +362,10 @@ struct EngineContextMut<'eng, 'gg> {
 impl<'eng> OutputContext<'eng> for EngineContext<'eng> {
     type Engine = Engine;
 
-    fn get<'out, O: 'static>(&self, anchor: &Anchor<O, Self::Engine>) -> &'out O
+    fn get<'out, I: AnchorInner<Self::Engine> + 'static>(
+        &self,
+        anchor: &Anchor<I, Self::Engine>,
+    ) -> &'out I::Output
     where
         'eng: 'out,
     {
@@ -372,7 +375,7 @@ impl<'eng> OutputContext<'eng> for EngineContext<'eng> {
                 panic!("attempted to get node that was not previously requested")
             }
             let unsafe_borrow = unsafe { node.anchor.as_ptr().as_ref().unwrap() };
-            let output: &O = unsafe_borrow
+            let output: &I::Output = unsafe_borrow
                 .as_ref()
                 .unwrap()
                 .output(&mut EngineContext {
@@ -388,7 +391,10 @@ impl<'eng> OutputContext<'eng> for EngineContext<'eng> {
 impl<'eng, 'gg> UpdateContext for EngineContextMut<'eng, 'gg> {
     type Engine = Engine;
 
-    fn get<'out, 'slf, O: 'static>(&'slf self, anchor: &Anchor<O, Self::Engine>) -> &'out O
+    fn get<'out, 'slf, I: AnchorInner<Self::Engine> + 'static>(
+        &'slf self,
+        anchor: &Anchor<I, Self::Engine>,
+    ) -> &'out I::Output
     where
         'slf: 'out,
     {
@@ -399,7 +405,7 @@ impl<'eng, 'gg> UpdateContext for EngineContextMut<'eng, 'gg> {
             }
 
             let unsafe_borrow = unsafe { node.anchor.as_ptr().as_ref().unwrap() };
-            let output: &O = unsafe_borrow
+            let output: &I::Output = unsafe_borrow
                 .as_ref()
                 .unwrap()
                 .output(&mut EngineContext {
@@ -411,9 +417,9 @@ impl<'eng, 'gg> UpdateContext for EngineContextMut<'eng, 'gg> {
         })
     }
 
-    fn request<'out, O: 'static>(
+    fn request<'out, I: AnchorInner<Self::Engine> + 'static>(
         &mut self,
-        anchor: &Anchor<O, Self::Engine>,
+        anchor: &Anchor<I, Self::Engine>,
         necessary: bool,
     ) -> Poll {
         let child = self.graph.get(anchor.token()).unwrap();

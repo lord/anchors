@@ -36,12 +36,12 @@ pub enum Poll {
 /// internal recomputation graph node this corresponds to. You should rarely create Anchors yourself;
 /// instead use one of the built-in functions like `Var::new` to create one, or create derivative Anchors
 /// with one of the `AnchorExt` methods.
-pub struct Anchor<O, E: Engine + ?Sized> {
+pub struct Anchor<I, E: Engine + ?Sized> {
     data: E::AnchorHandle,
-    phantom: PhantomData<O>,
+    phantom: PhantomData<I>,
 }
 
-impl<O, E: Engine> Anchor<O, E> {
+impl<I, E: Engine> Anchor<I, E> {
     fn new(data: E::AnchorHandle) -> Self {
         Self {
             data,
@@ -55,7 +55,7 @@ impl<O, E: Engine> Anchor<O, E> {
     }
 }
 
-impl<O, E: Engine> Clone for Anchor<O, E> {
+impl<I, E: Engine> Clone for Anchor<I, E> {
     fn clone(&self) -> Self {
         Self {
             data: self.data.clone(),
@@ -64,12 +64,12 @@ impl<O, E: Engine> Clone for Anchor<O, E> {
     }
 }
 
-impl<O, E: Engine> PartialEq for Anchor<O, E> {
+impl<I, E: Engine> PartialEq for Anchor<I, E> {
     fn eq(&self, other: &Self) -> bool {
         self.token() == other.token()
     }
 }
-impl<O, E: Engine> Eq for Anchor<O, E> {}
+impl<I, E: Engine> Eq for Anchor<I, E> {}
 
 /// A reference to a particular `AnchorInner`. Each engine implements its own.
 pub trait AnchorHandle: Sized + Clone {
@@ -89,7 +89,7 @@ pub trait Engine: 'static {
     type AnchorHandle: AnchorHandle;
     type DirtyHandle: DirtyHandle;
 
-    fn mount<I: AnchorInner<Self> + 'static>(inner: I) -> Anchor<I::Output, Self>;
+    fn mount<I: AnchorInner<Self> + 'static>(inner: I) -> Anchor<I, Self>;
 }
 
 /// Allows a node with non-Anchors inputs to manually mark itself as dirty. Each engine implements its own.
@@ -107,7 +107,10 @@ pub trait OutputContext<'eng> {
     /// calculated value can be accessed with this method. Its implementation is virtually
     /// identical to `UpdateContext`'s `get`. This is mostly used by AnchorInner implementations
     /// that want to return a reference to some other Anchor's output without cloning.
-    fn get<'out, O: 'static>(&self, anchor: &Anchor<O, Self::Engine>) -> &'out O
+    fn get<'out, I: AnchorInner<Self::Engine> + 'static>(
+        &self,
+        anchor: &Anchor<I, Self::Engine>,
+    ) -> &'out I::Output
     where
         'eng: 'out;
 }
@@ -118,7 +121,10 @@ pub trait UpdateContext {
 
     /// If `request` indicates another Anchor's value is ready, the previously
     /// calculated value can be accessed with this method.
-    fn get<'out, 'slf, O: 'static>(&'slf self, anchor: &Anchor<O, Self::Engine>) -> &'out O
+    fn get<'out, 'slf, I: AnchorInner<Self::Engine> + 'static>(
+        &'slf self,
+        anchor: &Anchor<I, Self::Engine>,
+    ) -> &'out I::Output
     where
         'slf: 'out;
 
@@ -128,16 +134,19 @@ pub trait UpdateContext {
     ///
     /// `necessary` is a bit that indicates if we are necessary, `anchor` should be marked as necessary
     /// as well. If you don't know what this bit should be set to, you probably want a value of `true`.
-    fn request<'out, O: 'static>(
+    fn request<'out, I: AnchorInner<Self::Engine> + 'static>(
         &mut self,
-        anchor: &Anchor<O, Self::Engine>,
+        anchor: &Anchor<I, Self::Engine>,
         necessary: bool,
     ) -> Poll;
 
     /// If `anchor` was previously passed to `request` and you no longer care about its output, you can
     /// pass it to `unrequest` so the engine will stop calling your `dirty` method when `anchor` changes.
     /// If `self` is necessary, this is also critical for ensuring `anchor` is no longer marked as necessary.
-    fn unrequest<'out, O: 'static>(&mut self, anchor: &Anchor<O, Self::Engine>);
+    fn unrequest<'out, I: AnchorInner<Self::Engine> + 'static>(
+        &mut self,
+        anchor: &Anchor<I, Self::Engine>,
+    );
 
     /// Returns a new dirty handle, used for marking that `self`'s output may have changed through some
     /// non incremental means. For instance, perhaps this `AnchorInner`s value represents the current time, or
