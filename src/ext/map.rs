@@ -11,7 +11,7 @@ pub struct Map<A, F, Out> {
 
 impl<'out, O, E, F, Out> crate::v3::AnchorInner<'out, E> for Map<(Anchor<O, E>,), F, Out>
 where
-    F: for<'any> FnMut(&'any O) -> Out,
+    F: FnMut(&O) -> Out,
     Out: PartialEq + 'static,
     O: 'static,
     E: Engine,

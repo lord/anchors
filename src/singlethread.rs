@@ -159,13 +159,12 @@ impl Engine {
             }
             let target_anchor = &graph.get(anchor.token()).unwrap().anchor;
             let borrow = target_anchor.borrow();
-            borrow
+            let output_ptr = borrow
                 .as_ref()
                 .unwrap()
-                .output(&mut EngineContext { engine: &self })
-                .downcast_ref::<O>()
-                .unwrap()
-                .clone()
+                .output(&mut EngineContext { engine: &self });
+            let output_ref: &O = unsafe {std::mem::transmute(output_ptr)};
+            output_ref.clone()
         })
     }
 
@@ -372,15 +371,14 @@ impl<'eng> OutputContext<'eng> for EngineContext<'eng> {
                 panic!("attempted to get node that was not previously requested")
             }
             let unsafe_borrow = unsafe { node.anchor.as_ptr().as_ref().unwrap() };
-            let output: &O = unsafe_borrow
+            let output_ptr = unsafe_borrow
                 .as_ref()
                 .unwrap()
                 .output(&mut EngineContext {
                     engine: self.engine,
-                })
-                .downcast_ref()
-                .unwrap();
-            output
+                });
+            let output_ref: &O = unsafe { std::mem::transmute(output_ptr)};
+            output_ref
         })
     }
 }
@@ -388,7 +386,7 @@ impl<'eng> OutputContext<'eng> for EngineContext<'eng> {
 impl<'eng, 'gg> UpdateContext for EngineContextMut<'eng, 'gg> {
     type Engine = Engine;
 
-    fn get<'out, 'slf, O: 'static>(&'slf self, anchor: &Anchor<O, Self::Engine>) -> &'out O
+    fn get<'out, 'slf, O>(&'slf self, anchor: &Anchor<O, Self::Engine>) -> &'out O
     where
         'slf: 'out,
     {
@@ -399,15 +397,14 @@ impl<'eng, 'gg> UpdateContext for EngineContextMut<'eng, 'gg> {
             }
 
             let unsafe_borrow = unsafe { node.anchor.as_ptr().as_ref().unwrap() };
-            let output: &O = unsafe_borrow
+            let output_ptr = unsafe_borrow
                 .as_ref()
                 .unwrap()
                 .output(&mut EngineContext {
                     engine: self.engine,
-                })
-                .downcast_ref()
-                .unwrap();
-            output
+                });
+            let output_ref = unsafe { std::mem::transmute(output_ptr) };
+            output_ref
         })
     }
 
@@ -465,7 +462,7 @@ impl<'eng, 'gg> UpdateContext for EngineContextMut<'eng, 'gg> {
 trait GenericAnchor {
     fn dirty(&mut self, child: &NodeKey);
     fn poll_updated<'eng, 'gg>(&mut self, ctx: &mut EngineContextMut<'eng, 'gg>) -> Poll;
-    fn output<'slf, 'out>(&'slf self, ctx: &mut EngineContext<'out>) -> &'out dyn Any
+    fn output<'slf, 'out>(&'slf self, ctx: &mut EngineContext<'out>) -> *const ()
     where
         'slf: 'out;
     fn debug_info(&self) -> AnchorDebugInfo;
@@ -477,11 +474,11 @@ impl<I: AnchorInner<Engine> + 'static> GenericAnchor for I {
     fn poll_updated<'eng, 'gg>(&mut self, ctx: &mut EngineContextMut<'eng, 'gg>) -> Poll {
         AnchorInner::poll_updated(self, ctx)
     }
-    fn output<'slf, 'out>(&'slf self, ctx: &mut EngineContext<'out>) -> &'out dyn Any
+    fn output<'slf, 'out>(&'slf self, ctx: &mut EngineContext<'out>) -> *const ()
     where
         'slf: 'out,
     {
-        AnchorInner::output(self, ctx)
+        unsafe { std::mem::transmute(AnchorInner::output(self, ctx)) }
     }
     fn debug_info(&self) -> AnchorDebugInfo {
         AnchorDebugInfo {

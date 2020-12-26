@@ -119,7 +119,7 @@ pub trait UpdateContext {
 
     /// If `request` indicates another Anchor's value is ready, the previously
     /// calculated value can be accessed with this method.
-    fn get<'out, 'slf, O: 'static>(&'slf self, anchor: &Anchor<O, Self::Engine>) -> &'out O
+    fn get<'out, 'slf, O>(&'slf self, anchor: &Anchor<O, Self::Engine>) -> &'out O
     where
         'slf: 'out;
 
