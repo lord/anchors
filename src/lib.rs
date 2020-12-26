@@ -3,6 +3,7 @@
 use std::marker::PhantomData;
 use std::panic::Location;
 
+mod v3;
 mod ext;
 pub use ext::AnchorExt;
 mod constant;
@@ -41,7 +42,7 @@ pub struct Anchor<O, E: Engine + ?Sized> {
     phantom: PhantomData<O>,
 }
 
-impl<O, E: Engine> Anchor<O, E> {
+impl<O, E: Engine + ?Sized> Anchor<O, E> {
     fn new(data: E::AnchorHandle) -> Self {
         Self {
             data,

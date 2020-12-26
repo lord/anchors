@@ -9,6 +9,62 @@ pub struct Map<A, F, Out> {
     pub(super) location: &'static Location<'static>,
 }
 
+impl<'out, O, E, F, Out> crate::v3::AnchorInner<'out, E> for Map<(Anchor<O, E>,), F, Out>
+where
+    F: for<'any> FnMut(&'any O) -> Out,
+    Out: PartialEq + 'static,
+    O: 'static,
+    E: Engine,
+{
+    type Output = &'out Out;
+
+    fn dirty(&mut self, child: &<E::AnchorHandle as crate::AnchorHandle>::Token) {
+        self.output_stale = true;
+    }
+
+    fn poll_updated<G: UpdateContext<Engine = E>>(&mut self, ctx: &mut G) -> Poll {
+        if !self.output_stale && self.output.is_some() {
+            return Poll::Unchanged;
+        }
+
+        let mut found_pending = false;
+        let mut found_updated = false;
+
+        match ctx.request(&self.anchors.0, true) {
+            Poll::Pending => {
+                found_pending = true;
+            }
+            Poll::Updated => {
+                found_updated = true;
+            }
+            Poll::Unchanged => {
+                // do nothing
+            }
+        }
+
+        if found_pending {
+            return Poll::Pending;
+        }
+
+        self.output_stale = false;
+
+        if self.output.is_none() || found_updated {
+            let new_val = Some((self.f)(&ctx.get(&self.anchors.0)));
+            if new_val != self.output {
+                self.output = new_val;
+                return Poll::Updated;
+            }
+        }
+        Poll::Unchanged
+    }
+
+    fn output<G: OutputContext<'out, Engine = E>>(&'out self, ctx: &mut G) -> Self::Output {
+        self.output
+            .as_ref()
+            .expect("output called on Map before value was calculated")
+    }
+}
+
 macro_rules! impl_tuple_map {
     ($([$output_type:ident, $num:tt])+) => {
         impl<$($output_type,)+ E, F, Out> AnchorInner<E> for
