@@ -411,7 +411,7 @@ impl<'eng, 'gg> UpdateContext for EngineContextMut<'eng, 'gg> {
         })
     }
 
-    fn request<'out, O: 'static>(
+    fn request<'out, O>(
         &mut self,
         anchor: &Anchor<O, Self::Engine>,
         necessary: bool,
@@ -448,7 +448,7 @@ impl<'eng, 'gg> UpdateContext for EngineContextMut<'eng, 'gg> {
         }
     }
 
-    fn unrequest<'out, O: 'static>(&mut self, anchor: &Anchor<O, Self::Engine>) {
+    fn unrequest<'out, O>(&mut self, anchor: &Anchor<O, Self::Engine>) {
         let child = self.graph.get(anchor.token()).unwrap();
         self.node.remove_necessary_child(child);
         Engine::update_necessary_children(child);
