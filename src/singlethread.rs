@@ -11,7 +11,7 @@ pub mod graph2;
 #[cfg(test)]
 mod test;
 
-use graph2::{Graph2, Graph2Guard, NodeGuard, NodeKey, RecalcState, AnchorHandle};
+use graph2::{AnchorHandle, Graph2, Graph2Guard, NodeGuard, NodeKey, RecalcState};
 
 /// The main struct of the Anchors library. Represents a single value on the singlthread recomputation graph.
 ///
@@ -430,11 +430,7 @@ impl<'eng, 'gg> UpdateContext for EngineContextMut<'eng, 'gg> {
         })
     }
 
-    fn request<'out, O: 'static>(
-        &mut self,
-        anchor: &Anchor<O>,
-        necessary: bool,
-    ) -> Poll {
+    fn request<'out, O: 'static>(&mut self, anchor: &Anchor<O>, necessary: bool) -> Poll {
         let child = self.graph.get(anchor.token()).unwrap();
         let height_already_increased = match graph2::ensure_height_increases(child, self.node) {
             Ok(v) => v,

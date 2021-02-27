@@ -157,7 +157,7 @@ fn test_garbage_collection_wont_panic() {
 #[test]
 fn test_readme_example() {
     // example
-    use crate::{singlethread::Engine, expert::AnchorExt, expert::Var};
+    use crate::{expert::AnchorExt, expert::Var, singlethread::Engine};
     let mut engine = Engine::new();
 
     // create a couple `Var`s

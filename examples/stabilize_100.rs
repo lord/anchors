@@ -1,5 +1,5 @@
-use anchors::singlethread::Engine;
 use anchors::expert::{Anchor, AnchorExt, Var, VarSetter};
+use anchors::singlethread::Engine;
 
 const NODE_COUNT: u64 = 100;
 const ITER_COUNT: u64 = 500000;
