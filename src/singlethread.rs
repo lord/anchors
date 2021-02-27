@@ -503,7 +503,7 @@ struct AnchorDebugInfo {
 }
 
 impl AnchorDebugInfo {
-    fn to_string(&self) -> String {
+    fn _to_string(&self) -> String {
         match self.location {
             Some((name, location)) => format!("{} ({})", location, name),
             None => format!("{}", self.type_info),
