@@ -1,8 +1,8 @@
-use crate::common::{AnchorExt, AnchorSplit};
+use crate::expert::{AnchorExt, AnchorSplit};
 #[test]
 fn test_cutoff_simple_observed() {
     let mut engine = crate::singlethread::Engine::new();
-    let (v, v_setter) = crate::common::Var::new(100i32);
+    let (v, v_setter) = crate::expert::Var::new(100i32);
     let mut old_val = 0i32;
     let post_cutoff = v
         .cutoff(move |new_val| {
@@ -27,7 +27,7 @@ fn test_cutoff_simple_observed() {
 #[test]
 fn test_cutoff_simple_unobserved() {
     let mut engine = crate::singlethread::Engine::new();
-    let (v, v_setter) = crate::common::Var::new(100i32);
+    let (v, v_setter) = crate::expert::Var::new(100i32);
     let mut old_val = 0i32;
     let post_cutoff = v
         .cutoff(move |new_val| {
@@ -54,7 +54,7 @@ fn test_refmap_simple() {
     struct NoClone(usize);
 
     let mut engine = crate::singlethread::Engine::new();
-    let (v, _) = crate::common::Var::new((NoClone(1), NoClone(2)));
+    let (v, _) = crate::expert::Var::new((NoClone(1), NoClone(2)));
     let a = v.refmap(|(a, _)| a);
     let b = v.refmap(|(_, b)| b);
     let a_correct = a.map(|a| a == &NoClone(1));
@@ -66,7 +66,7 @@ fn test_refmap_simple() {
 #[test]
 fn test_split_simple() {
     let mut engine = crate::singlethread::Engine::new();
-    let (v, _) = crate::common::Var::new((1usize, 2usize, 3usize));
+    let (v, _) = crate::expert::Var::new((1usize, 2usize, 3usize));
     let (a, b, c) = v.split();
     assert_eq!(engine.get(&a), 1);
     assert_eq!(engine.get(&b), 2);
@@ -76,8 +76,8 @@ fn test_split_simple() {
 #[test]
 fn test_map_simple() {
     let mut engine = crate::singlethread::Engine::new();
-    let (v1, _v1_setter) = crate::common::Var::new(1usize);
-    let (v2, _v2_setter) = crate::common::Var::new(123usize);
+    let (v1, _v1_setter) = crate::expert::Var::new(1usize);
+    let (v2, _v2_setter) = crate::expert::Var::new(123usize);
     let _a2 = v1.map(|num1| {
         println!("a: adding to {:?}", num1);
         *num1
@@ -93,9 +93,9 @@ fn test_map_simple() {
 #[test]
 fn test_then_simple() {
     let mut engine = crate::singlethread::Engine::new();
-    let (v1, v1_setter) = crate::common::Var::new(true);
-    let (v2, _v2_setter) = crate::common::Var::new(10usize);
-    let (v3, _v3_setter) = crate::common::Var::new(20usize);
+    let (v1, v1_setter) = crate::expert::Var::new(true);
+    let (v2, _v2_setter) = crate::expert::Var::new(10usize);
+    let (v3, _v3_setter) = crate::expert::Var::new(20usize);
     let a = v1.then(move |val| if *val { v2.clone() } else { v3.clone() });
     engine.mark_observed(&a);
     engine.stabilize();
@@ -111,7 +111,7 @@ fn test_observed_marking() {
     use crate::singlethread::ObservedState;
 
     let mut engine = crate::singlethread::Engine::new();
-    let (v1, _v1_setter) = crate::common::Var::new(1usize);
+    let (v1, _v1_setter) = crate::expert::Var::new(1usize);
     let a = v1.map(|num1| *num1 + 1);
     let b = a.map(|num1| *num1 + 2);
     let c = b.map(|num1| *num1 + 3);
@@ -148,7 +148,7 @@ fn test_observed_marking() {
 #[test]
 fn test_garbage_collection_wont_panic() {
     let mut engine = crate::singlethread::Engine::new();
-    let (v1, _v1_setter) = crate::common::Var::new(1usize);
+    let (v1, _v1_setter) = crate::expert::Var::new(1usize);
     engine.get(&v1);
     std::mem::drop(v1);
     engine.stabilize();
@@ -157,7 +157,7 @@ fn test_garbage_collection_wont_panic() {
 #[test]
 fn test_readme_example() {
     // example
-    use crate::{singlethread::Engine, common::AnchorExt, common::Var};
+    use crate::{singlethread::Engine, expert::AnchorExt, expert::Var};
     let mut engine = Engine::new();
 
     // create a couple `Var`s

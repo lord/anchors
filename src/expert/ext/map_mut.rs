@@ -1,20 +1,20 @@
-use crate::common::{Anchor, AnchorInner, Engine, OutputContext, Poll, UpdateContext, AnchorHandle};
+use crate::expert::{Anchor, AnchorInner, Engine, OutputContext, Poll, UpdateContext};
 use std::panic::Location;
 
-pub struct Map<A, F, Out> {
+pub struct MapMut<A, F, Out> {
     pub(super) f: F,
-    pub(super) output: Option<Out>,
+    pub(super) output: Out,
     pub(super) output_stale: bool,
     pub(super) anchors: A,
     pub(super) location: &'static Location<'static>,
 }
 
-macro_rules! impl_tuple_map {
+macro_rules! impl_tuple_map_mut {
     ($([$output_type:ident, $num:tt])+) => {
         impl<$($output_type,)+ E, F, Out> AnchorInner<E> for
-            Map<($(Anchor<$output_type, E>,)+), F, Out>
+            MapMut<($(Anchor<$output_type, E>,)+), F, Out>
         where
-            F: for<'any> FnMut($(&'any $output_type),+) -> Out,
+            F: for<'any> FnMut(&'any mut Out, $(&'any $output_type),+) -> bool,
             Out: PartialEq + 'static,
             $(
                 $output_type: 'static,
@@ -22,14 +22,14 @@ macro_rules! impl_tuple_map {
             E: Engine,
         {
             type Output = Out;
-            fn dirty(&mut self, _edge:  &<E::AnchorHandle as AnchorHandle>::Token) {
+            fn dirty(&mut self, _edge:  &<E::AnchorHandle as crate::expert::AnchorHandle>::Token) {
                 self.output_stale = true;
             }
             fn poll_updated<G: UpdateContext<Engine=E>>(
                 &mut self,
                 ctx: &mut G,
             ) -> Poll {
-                if !self.output_stale && self.output.is_some() {
+                if !self.output_stale {
                     return Poll::Unchanged;
                 }
 
@@ -56,10 +56,9 @@ macro_rules! impl_tuple_map {
 
                 self.output_stale = false;
 
-                if self.output.is_none() || found_updated {
-                    let new_val = Some((self.f)($(&ctx.get(&self.anchors.$num)),+));
-                    if new_val != self.output {
-                        self.output = new_val;
+                if found_updated {
+                    let did_update = (self.f)(&mut self.output, $(&ctx.get(&self.anchors.$num)),+);
+                    if did_update {
                         return Poll::Updated
                     }
                 }
@@ -72,9 +71,7 @@ macro_rules! impl_tuple_map {
             where
                 'slf: 'out,
             {
-                self.output
-                    .as_ref()
-                    .expect("output called on Map before value was calculated")
+                &self.output
             }
 
             fn debug_location(&self) -> Option<(&'static str, &'static Location<'static>)> {
@@ -84,29 +81,29 @@ macro_rules! impl_tuple_map {
     }
 }
 
-impl_tuple_map! {
+impl_tuple_map_mut! {
     [O0, 0]
 }
 
-impl_tuple_map! {
+impl_tuple_map_mut! {
     [O0, 0]
     [O1, 1]
 }
 
-impl_tuple_map! {
+impl_tuple_map_mut! {
     [O0, 0]
     [O1, 1]
     [O2, 2]
 }
 
-impl_tuple_map! {
+impl_tuple_map_mut! {
     [O0, 0]
     [O1, 1]
     [O2, 2]
     [O3, 3]
 }
 
-impl_tuple_map! {
+impl_tuple_map_mut! {
     [O0, 0]
     [O1, 1]
     [O2, 2]
@@ -114,7 +111,7 @@ impl_tuple_map! {
     [O4, 4]
 }
 
-impl_tuple_map! {
+impl_tuple_map_mut! {
     [O0, 0]
     [O1, 1]
     [O2, 2]
@@ -123,7 +120,7 @@ impl_tuple_map! {
     [O5, 5]
 }
 
-impl_tuple_map! {
+impl_tuple_map_mut! {
     [O0, 0]
     [O1, 1]
     [O2, 2]
@@ -133,7 +130,7 @@ impl_tuple_map! {
     [O6, 6]
 }
 
-impl_tuple_map! {
+impl_tuple_map_mut! {
     [O0, 0]
     [O1, 1]
     [O2, 2]
@@ -144,7 +141,7 @@ impl_tuple_map! {
     [O7, 7]
 }
 
-impl_tuple_map! {
+impl_tuple_map_mut! {
     [O0, 0]
     [O1, 1]
     [O2, 2]

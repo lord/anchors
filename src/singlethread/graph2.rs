@@ -139,7 +139,7 @@ impl Drop for AnchorHandle {
         }
     }
 }
-impl crate::common::AnchorHandle for AnchorHandle {
+impl crate::expert::AnchorHandle for AnchorHandle {
     type Token = NodeKey;
     fn token(&self) -> NodeKey {
         self.num
@@ -374,7 +374,7 @@ impl Graph2 {
     #[cfg(test)]
     pub fn insert_testing<'a>(&'a self) -> AnchorHandle {
         self.insert(
-            Box::new(crate::common::Constant::new_raw_testing(123)),
+            Box::new(crate::expert::Constant::new_raw_testing(123)),
             AnchorDebugInfo {
                 location: None,
                 type_info: "testing dummy anchor",
@@ -746,7 +746,7 @@ mod test {
 
     #[test]
     fn test_free_list() {
-        use crate::common::AnchorHandle;
+        use crate::expert::AnchorHandle;
         let graph = Graph2::new(10);
         let a = graph.insert_testing();
         let b = graph.insert_testing();

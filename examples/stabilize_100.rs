@@ -1,5 +1,5 @@
 use anchors::singlethread::Engine;
-use anchors::common::{Anchor, AnchorExt, Var, VarSetter};
+use anchors::expert::{Anchor, AnchorExt, Var, VarSetter};
 
 const NODE_COUNT: u64 = 100;
 const ITER_COUNT: u64 = 500000;
@@ -23,7 +23,7 @@ fn main() {
 fn iter(
     node: Anchor<u64, Engine>,
     mut engine: Engine,
-    set_first_num: VarSetter<u64, <Engine as anchors::common::Engine>::DirtyHandle>,
+    set_first_num: VarSetter<u64, <Engine as anchors::expert::Engine>::DirtyHandle>,
 ) {
     let mut update_number = 0;
     for i in 0..ITER_COUNT {
