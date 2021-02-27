@@ -1,3 +1,9 @@
+//! Common code used between different engines.
+//!
+//! Unless you're implementing your own generic `AnchorInner`s or your own execution engine,
+//! you should never need to import things from here. `singlethread` should re-export anything
+//! you need to use `anchors`!
+
 use std::marker::PhantomData;
 use std::panic::Location;
 
