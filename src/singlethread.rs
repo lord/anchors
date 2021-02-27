@@ -6,8 +6,8 @@
 //! Air, likely somewhat more if single node has a significant number of parents or children. Hopefully
 //! this will significantly improve over the coming months.
 
-mod graph2;
 mod generation;
+mod graph2;
 
 #[cfg(test)]
 mod test;
@@ -36,11 +36,11 @@ pub use crate::expert::{AnchorExt, AnchorSplit};
 
 use crate::expert::{AnchorInner, OutputContext, Poll, UpdateContext};
 
+use generation::Generation;
 use std::any::Any;
 use std::cell::RefCell;
 use std::panic::Location;
 use std::rc::Rc;
-use generation::Generation;
 
 thread_local! {
     static DEFAULT_MOUNTER: RefCell<Option<Mounter>> = RefCell::new(None);
