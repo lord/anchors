@@ -12,7 +12,10 @@ mod generation;
 #[cfg(test)]
 mod test;
 
-use graph2::{AnchorHandle, Graph2, Graph2Guard, NodeGuard, NodeKey, RecalcState};
+use graph2::{Graph2, Graph2Guard, NodeGuard, NodeKey, RecalcState};
+
+pub use graph2::AnchorHandle;
+pub use graph2::NodeKey as AnchorToken;
 
 /// The main struct of the Anchors library. Represents a single value on the singlthread recomputation graph.
 ///
@@ -24,7 +27,7 @@ pub type Anchor<T> = crate::expert::Anchor<T, Engine>;
 pub type Var<T> = crate::expert::Var<T, DirtyHandle>;
 
 /// A setter that can update values inside an associated `Var`.
-pub type VarSetter<T> = crate::expert::VarSetter<T, AnchorHandle>;
+pub type VarSetter<T> = crate::expert::VarSetter<T, DirtyHandle>;
 
 /// An Anchor for immutable values.
 pub type Constant<T> = crate::expert::Constant<T>;
