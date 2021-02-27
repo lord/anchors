@@ -42,7 +42,7 @@ impl<E: Engine, K: Ord + Clone + PartialEq + 'static, V: Clone + PartialEq + 'st
                         return true;
                     }
                 }
-                DiffItem::Remove(k, v) => {
+                DiffItem::Remove(k, _v) => {
                     out.remove(k);
                     return true;
                 }
@@ -80,7 +80,7 @@ mod test {
     fn test_filter() {
         let mut engine = crate::singlethread::Engine::new();
         let mut dict = Dict::new();
-        let (a, a_setter) = crate::expert::var::Var::new(dict.clone());
+        let (a, a_setter) = crate::expert::Var::new(dict.clone());
         let b = a.filter(|_, n| *n > 10);
         let b_out = engine.get(&b);
         assert_eq!(0, b_out.len());
@@ -110,7 +110,7 @@ mod test {
     fn test_map() {
         let mut engine = crate::singlethread::Engine::new();
         let mut dict = Dict::new();
-        let (a, a_setter) = crate::expert::var::Var::new(dict.clone());
+        let (a, a_setter) = crate::expert::Var::new(dict.clone());
         let b = a.map(|_, n| *n + 1);
         let b_out = engine.get(&b);
         assert_eq!(0, b_out.len());

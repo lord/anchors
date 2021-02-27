@@ -2,3 +2,4 @@
 
 pub mod expert;
 pub mod singlethread;
+pub mod dict;

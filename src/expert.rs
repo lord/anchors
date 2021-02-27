@@ -13,7 +13,6 @@ mod constant;
 mod var;
 pub use constant::Constant;
 pub use var::{Var, VarSetter};
-mod dict;
 
 /// Indicates whether a value is ready for reading, and if it is, whether it's changed
 /// since the last read.

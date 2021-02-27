@@ -6,7 +6,8 @@
 //! Air, likely somewhat more if single node has a significant number of parents or children. Hopefully
 //! this will significantly improve over the coming months.
 
-pub mod graph2;
+mod graph2;
+mod generation;
 
 #[cfg(test)]
 mod test;
@@ -28,8 +29,7 @@ pub type VarSetter<T> = crate::expert::VarSetter<T, AnchorHandle>;
 /// An Anchor for immutable values.
 pub type Constant<T> = crate::expert::Constant<T>;
 
-/// TODO DOCS
-pub use crate::expert::AnchorExt;
+pub use crate::expert::{AnchorExt, AnchorSplit};
 
 use crate::expert::{AnchorInner, OutputContext, Poll, UpdateContext};
 
@@ -37,20 +37,7 @@ use std::any::Any;
 use std::cell::RefCell;
 use std::panic::Location;
 use std::rc::Rc;
-
-use std::num::NonZeroU64;
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
-pub struct Generation(NonZeroU64);
-impl Generation {
-    fn new() -> Generation {
-        Generation(NonZeroU64::new(1).unwrap())
-    }
-    fn increment(&mut self) {
-        let gen: u64 = u64::from(self.0) + 1;
-        self.0 = NonZeroU64::new(gen).unwrap();
-    }
-}
+use generation::Generation;
 
 thread_local! {
     static DEFAULT_MOUNTER: RefCell<Option<Mounter>> = RefCell::new(None);
