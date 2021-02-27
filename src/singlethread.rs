@@ -8,11 +8,14 @@
 
 pub mod graph2;
 
+#[cfg(test)]
+mod test;
+
 use graph2::{Graph2, Graph2Guard, NodeGuard, NodeKey, RecalcState};
 
 pub use graph2::AnchorHandle;
 
-use crate::{Anchor, AnchorInner, OutputContext, Poll, UpdateContext};
+use crate::common::{Anchor, AnchorInner, OutputContext, Poll, UpdateContext};
 
 use std::any::Any;
 use std::cell::RefCell;
@@ -69,7 +72,7 @@ struct Mounter {
     graph: Rc<Graph2>,
 }
 
-impl crate::Engine for Engine {
+impl crate::common::Engine for Engine {
     type AnchorHandle = AnchorHandle;
     type DirtyHandle = DirtyHandle;
 
@@ -342,7 +345,7 @@ pub struct DirtyHandle {
     num: NodeKey,
     dirty_marks: Rc<RefCell<Vec<NodeKey>>>,
 }
-impl crate::DirtyHandle for DirtyHandle {
+impl crate::common::DirtyHandle for DirtyHandle {
     fn mark_dirty(&self) {
         self.dirty_marks.borrow_mut().push(self.num);
     }
