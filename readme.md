@@ -145,42 +145,36 @@ Maybe twice as fast?
     <th>total time to `get` end of chain</th>
     <th>total time / node count</th>
   </tr>
-
   <tr>
     <td>10</td>
     <td>observed</td>
     <td>[242.68 ns 242.98 ns 243.37 ns]</td>
     <td>24.30 ns</td>
   </tr>
-
-  <tr>
-    <td>10</td>
-    <td>unobserved</td>
-    <td>[354.05 ns 354.21 ns 354.37 ns]</td>
-    <td>35.42</td>
-  </tr>
-
   <tr>
     <td>100</td>
     <td>observed</td>
     <td>[1.9225 us 1.9232 us 1.9239 us]</td>
     <td>19.232 ns</td>
   </tr>
-
-  <tr>
-    <td>100</td>
-    <td>unobserved</td>
-    <td>[3.3810 us 3.3825 us 3.3841 us]</td>
-    <td>33.83 ns</td>
-  </tr>
-
   <tr>
     <td>1000</td>
     <td>observed</td>
     <td>[20.421 us 20.455 us 20.489 us]</td>
     <td>20.46 ns</td>
   </tr>
-
+  <tr>
+    <td>10</td>
+    <td>unobserved</td>
+    <td>[354.05 ns 354.21 ns 354.37 ns]</td>
+    <td>35.42</td>
+  </tr>
+  <tr>
+    <td>100</td>
+    <td>unobserved</td>
+    <td>[3.3810 us 3.3825 us 3.3841 us]</td>
+    <td>33.83 ns</td>
+  </tr>
   <tr>
     <td>1000</td>
     <td>unobserved</td>
