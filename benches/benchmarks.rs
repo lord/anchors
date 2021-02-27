@@ -1,4 +1,5 @@
-use anchors::{singlethread::Engine, AnchorExt, Var};
+use anchors::singlethread::Engine;
+use anchors::expert::{AnchorExt, Var};
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 
 fn stabilize_linear_nodes_simple(c: &mut Criterion) {
