@@ -134,6 +134,61 @@ Very roughly, it looks like observed nodes have an overhead of at around `~42-50
 
 Also worth mentioning for any incremental program, the slowdowns will probably come from other aspects of the framework that aren't measured with this very simple microbenchmark.
 
+## How fast is it on an M1 mac?
+
+Maybe twice as fast?
+
+<table>
+  <tr>
+    <th>node count</th>
+    <th>used `mark_observed`?</th>
+    <th>total time to `get` end of chain</th>
+    <th>total time / node count</th>
+  </tr>
+
+  <tr>
+    <td>10</td>
+    <td>observed</td>
+    <td>[242.68 ns 242.98 ns 243.37 ns]</td>
+    <td>24.30 ns</td>
+  </tr>
+
+  <tr>
+    <td>10</td>
+    <td>unobserved</td>
+    <td>[354.05 ns 354.21 ns 354.37 ns]</td>
+    <td>35.42</td>
+  </tr>
+
+  <tr>
+    <td>100</td>
+    <td>observed</td>
+    <td>[1.9225 us 1.9232 us 1.9239 us]</td>
+    <td>19.232 ns</td>
+  </tr>
+
+  <tr>
+    <td>100</td>
+    <td>unobserved</td>
+    <td>[3.3810 us 3.3825 us 3.3841 us]</td>
+    <td>33.83 ns</td>
+  </tr>
+
+  <tr>
+    <td>1000</td>
+    <td>observed</td>
+    <td>[20.421 us 20.455 us 20.489 us]</td>
+    <td>20.46 ns</td>
+  </tr>
+
+  <tr>
+    <td>1000</td>
+    <td>unobserved</td>
+    <td>[41.429 us 41.536 us 41.642 us]</td>
+    <td>41.54 ns</td>
+  </tr>
+</table>
+
 ## See Also
 
 - https://github.com/Adapton/adapton.rust
