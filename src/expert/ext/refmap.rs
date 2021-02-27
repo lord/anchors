@@ -1,4 +1,4 @@
-use crate::{Anchor, AnchorInner, Engine, OutputContext, Poll, UpdateContext};
+use crate::expert::{Anchor, AnchorInner, Engine, OutputContext, Poll, UpdateContext};
 use std::panic::Location;
 
 pub struct RefMap<A, F> {
@@ -14,7 +14,7 @@ where
 {
     type Output = Out;
 
-    fn dirty(&mut self, _edge: &<E::AnchorHandle as crate::AnchorHandle>::Token) {
+    fn dirty(&mut self, _edge: &<E::AnchorHandle as crate::expert::AnchorHandle>::Token) {
         // noop
     }
     fn poll_updated<G: UpdateContext<Engine = E>>(&mut self, ctx: &mut G) -> Poll {

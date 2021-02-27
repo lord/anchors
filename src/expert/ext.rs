@@ -15,7 +15,8 @@ mod then;
 /// values incrementally into a tuple with:
 ///
 /// ```
-/// use anchors::{singlethread::Engine, Constant, AnchorExt};
+/// use anchors::singlethread::Engine;
+/// use anchors::expert::{Constant, AnchorExt};
 /// let mut engine = Engine::new();
 /// let a = Constant::new(1);
 /// let b = Constant::new(2);
@@ -35,7 +36,8 @@ pub trait AnchorExt<E: Engine>: Sized {
     /// For example, you can add two numbers together with `map`:
     ///
     /// ```
-    /// use anchors::{singlethread::Engine, Anchor, Constant, AnchorExt};
+    /// use anchors::singlethread::Engine;
+    /// use anchors::expert::{Constant, AnchorExt, Anchor};
     /// let mut engine = Engine::new();
     /// let a = Constant::new(1);
     /// let b = Constant::new(2);
@@ -68,7 +70,8 @@ pub trait AnchorExt<E: Engine>: Sized {
     /// For example, you can select which of two additions gets calculated:
     ///
     /// ```
-    /// use anchors::{singlethread::Engine, Anchor, Constant, AnchorExt};
+    /// use anchors::singlethread::Engine;
+    /// use anchors::expert::{Constant, AnchorExt, Anchor};
     /// let mut engine = Engine::new();
     /// let decision = Constant::new(true);
     /// let num = Constant::new(1);
@@ -104,7 +107,8 @@ pub trait AnchorExt<E: Engine>: Sized {
     /// For example, you can only perform an addition if an input changes by more than 10:
     ///
     /// ```
-    /// use anchors::{singlethread::Engine, Anchor, Var, AnchorExt};
+    /// use anchors::singlethread::Engine;
+    /// use anchors::expert::{Anchor, Var, AnchorExt};
     /// let mut engine = Engine::new();
     /// let (num, set_num) = Var::new(1i32);
     /// let cutoff = {
@@ -146,7 +150,8 @@ pub trait AnchorExt<E: Engine>: Sized {
     /// For example, you can lookup a particular value inside a tuple without cloning:
     ///
     /// ```
-    /// use anchors::{singlethread::Engine, Anchor, Constant, AnchorExt};
+    /// use anchors::singlethread::Engine;
+    /// use anchors::expert::{Anchor, Constant, AnchorExt};
     /// struct CantClone {val: usize};
     /// let mut engine = Engine::new();
     /// let tuple = Constant::new((CantClone{val: 1}, CantClone{val: 2}));

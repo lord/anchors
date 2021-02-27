@@ -6,32 +6,41 @@
 //! Air, likely somewhat more if single node has a significant number of parents or children. Hopefully
 //! this will significantly improve over the coming months.
 
-pub mod graph2;
+mod generation;
+mod graph2;
+
+#[cfg(test)]
+mod test;
 
 use graph2::{Graph2, Graph2Guard, NodeGuard, NodeKey, RecalcState};
 
 pub use graph2::AnchorHandle;
+pub use graph2::NodeKey as AnchorToken;
 
-use crate::{Anchor, AnchorInner, OutputContext, Poll, UpdateContext};
+/// The main struct of the Anchors library. Represents a single value on the singlthread recomputation graph.
+///
+/// You should basically never need to create these with `Anchor::new`; instead call functions like `Var::new` and `AnchorExt::map`
+/// to create them.
+pub type Anchor<T> = crate::expert::Anchor<T, Engine>;
 
+/// An Anchor type for values that are mutated by calling a setter function from outside of the Anchors recomputation graph.
+pub type Var<T> = crate::expert::Var<T, DirtyHandle>;
+
+/// A setter that can update values inside an associated `Var`.
+pub type VarSetter<T> = crate::expert::VarSetter<T, DirtyHandle>;
+
+/// An Anchor for immutable values.
+pub type Constant<T> = crate::expert::Constant<T>;
+
+pub use crate::expert::{AnchorExt, AnchorSplit};
+
+use crate::expert::{AnchorInner, OutputContext, Poll, UpdateContext};
+
+use generation::Generation;
 use std::any::Any;
 use std::cell::RefCell;
 use std::panic::Location;
 use std::rc::Rc;
-
-use std::num::NonZeroU64;
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
-pub struct Generation(NonZeroU64);
-impl Generation {
-    fn new() -> Generation {
-        Generation(NonZeroU64::new(1).unwrap())
-    }
-    fn increment(&mut self) {
-        let gen: u64 = u64::from(self.0) + 1;
-        self.0 = NonZeroU64::new(gen).unwrap();
-    }
-}
 
 thread_local! {
     static DEFAULT_MOUNTER: RefCell<Option<Mounter>> = RefCell::new(None);
@@ -69,11 +78,11 @@ struct Mounter {
     graph: Rc<Graph2>,
 }
 
-impl crate::Engine for Engine {
+impl crate::expert::Engine for Engine {
     type AnchorHandle = AnchorHandle;
     type DirtyHandle = DirtyHandle;
 
-    fn mount<I: AnchorInner<Self> + 'static>(inner: I) -> Anchor<I::Output, Self> {
+    fn mount<I: AnchorInner<Self> + 'static>(inner: I) -> Anchor<I::Output> {
         DEFAULT_MOUNTER.with(|default_mounter| {
             let mut borrow1 = default_mounter.borrow_mut();
             let this = borrow1
@@ -110,7 +119,7 @@ impl Engine {
     /// when *any* Anchor in the graph is retrieved. If you get an output value fairly
     /// often, it's best to mark it as Observed so that Anchors can calculate its
     /// dependencies faster.
-    pub fn mark_observed<O: 'static>(&mut self, anchor: &Anchor<O, Engine>) {
+    pub fn mark_observed<O: 'static>(&mut self, anchor: &Anchor<O>) {
         self.graph.with(|graph| {
             let node = graph.get(anchor.token()).unwrap();
             node.observed.set(true);
@@ -123,7 +132,7 @@ impl Engine {
     /// Marks an Anchor as unobserved. If the `anchor` has parents that are necessary
     /// because `anchor` was previously observed, those parents will be unmarked as
     /// necessary.
-    pub fn mark_unobserved<O: 'static>(&mut self, anchor: &Anchor<O, Engine>) {
+    pub fn mark_unobserved<O: 'static>(&mut self, anchor: &Anchor<O>) {
         self.graph.with(|graph| {
             let node = graph.get(anchor.token()).unwrap();
             node.observed.set(false);
@@ -144,7 +153,7 @@ impl Engine {
 
     /// Retrieves the value of an Anchor, recalculating dependencies as necessary to get the
     /// latest value.
-    pub fn get<'out, O: Clone + 'static>(&mut self, anchor: &Anchor<O, Engine>) -> O {
+    pub fn get<'out, O: Clone + 'static>(&mut self, anchor: &Anchor<O>) -> O {
         // stabilize once before, since the stabilization process may mark our requested node
         // as dirty
         self.stabilize();
@@ -280,7 +289,7 @@ impl Engine {
         debug
     }
 
-    pub fn check_observed<T>(&self, anchor: &Anchor<T, Engine>) -> ObservedState {
+    pub fn check_observed<T>(&self, anchor: &Anchor<T>) -> ObservedState {
         self.graph.with(|graph| {
             let node = graph.get(anchor.token()).unwrap();
             Self::check_observed_raw(node)
@@ -342,7 +351,7 @@ pub struct DirtyHandle {
     num: NodeKey,
     dirty_marks: Rc<RefCell<Vec<NodeKey>>>,
 }
-impl crate::DirtyHandle for DirtyHandle {
+impl crate::expert::DirtyHandle for DirtyHandle {
     fn mark_dirty(&self) {
         self.dirty_marks.borrow_mut().push(self.num);
     }
@@ -362,7 +371,7 @@ struct EngineContextMut<'eng, 'gg> {
 impl<'eng> OutputContext<'eng> for EngineContext<'eng> {
     type Engine = Engine;
 
-    fn get<'out, O: 'static>(&self, anchor: &Anchor<O, Self::Engine>) -> &'out O
+    fn get<'out, O: 'static>(&self, anchor: &Anchor<O>) -> &'out O
     where
         'eng: 'out,
     {
@@ -388,7 +397,7 @@ impl<'eng> OutputContext<'eng> for EngineContext<'eng> {
 impl<'eng, 'gg> UpdateContext for EngineContextMut<'eng, 'gg> {
     type Engine = Engine;
 
-    fn get<'out, 'slf, O: 'static>(&'slf self, anchor: &Anchor<O, Self::Engine>) -> &'out O
+    fn get<'out, 'slf, O: 'static>(&'slf self, anchor: &Anchor<O>) -> &'out O
     where
         'slf: 'out,
     {
@@ -411,11 +420,7 @@ impl<'eng, 'gg> UpdateContext for EngineContextMut<'eng, 'gg> {
         })
     }
 
-    fn request<'out, O: 'static>(
-        &mut self,
-        anchor: &Anchor<O, Self::Engine>,
-        necessary: bool,
-    ) -> Poll {
+    fn request<'out, O: 'static>(&mut self, anchor: &Anchor<O>, necessary: bool) -> Poll {
         let child = self.graph.get(anchor.token()).unwrap();
         let height_already_increased = match graph2::ensure_height_increases(child, self.node) {
             Ok(v) => v,
@@ -448,7 +453,7 @@ impl<'eng, 'gg> UpdateContext for EngineContextMut<'eng, 'gg> {
         }
     }
 
-    fn unrequest<'out, O: 'static>(&mut self, anchor: &Anchor<O, Self::Engine>) {
+    fn unrequest<'out, O: 'static>(&mut self, anchor: &Anchor<O>) {
         let child = self.graph.get(anchor.token()).unwrap();
         self.node.remove_necessary_child(child);
         Engine::update_necessary_children(child);
