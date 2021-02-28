@@ -7,13 +7,14 @@ use std::rc::Rc;
 /// An Anchor type for values that are mutated by calling a setter function from outside of the Anchors recomputation graph.
 struct VarAnchor<T, E: Engine> {
     inner: Rc<RefCell<VarShared<T, E>>>,
-    my_val: T,
+    val: Rc<T>,
 }
 
 #[derive(Clone)]
 struct VarShared<T, E: Engine> {
     dirty_handle: Option<E::DirtyHandle>,
-    val: Option<T>,
+    val: Rc<T>,
+    value_changed: bool,
 }
 
 /// A setter that can update values inside an associated `VarAnchor`.
@@ -34,13 +35,15 @@ impl<T, E: Engine> Clone for Var<T, E> {
 impl<T: 'static, E: Engine> Var<T, E> {
     /// Creates a new Var
     pub fn new(val: T) -> Var<T, E> {
+        let val = Rc::new(val);
         let inner = Rc::new(RefCell::new(VarShared {
             dirty_handle: None,
-            val: None,
+            val: val.clone(),
+            value_changed: true,
         }));
         Var {
             inner: inner.clone(),
-            anchor: E::mount(VarAnchor { inner, my_val: val }),
+            anchor: E::mount(VarAnchor { inner, val }),
         }
     }
 
@@ -48,10 +51,16 @@ impl<T: 'static, E: Engine> Var<T, E> {
     /// the value has changed.
     pub fn set(&self, val: T) {
         let mut inner = self.inner.borrow_mut();
-        inner.val = Some(val);
+        inner.val = Rc::new(val);
         if let Some(waker) = &inner.dirty_handle {
             waker.mark_dirty();
         }
+        inner.value_changed = true;
+    }
+
+    /// Retrieves the last value set
+    pub fn get(&self) -> Rc<T> {
+        self.inner.borrow().val.clone()
     }
 
     pub fn watch(&self) -> Anchor<T, E> {
@@ -71,14 +80,14 @@ impl<E: Engine, T: 'static> AnchorInner<E> for VarAnchor<T, E> {
         if first_update {
             inner.dirty_handle = Some(ctx.dirty_handle());
         }
-        if let Some(new_val) = inner.val.take() {
-            self.my_val = new_val;
-            Poll::Updated
-        } else if first_update {
+        let res = if inner.value_changed {
+            self.val = inner.val.clone();
             Poll::Updated
         } else {
             Poll::Unchanged
-        }
+        };
+        inner.value_changed = false;
+        res
     }
 
     fn output<'slf, 'out, G: OutputContext<'out, Engine = E>>(
@@ -88,6 +97,6 @@ impl<E: Engine, T: 'static> AnchorInner<E> for VarAnchor<T, E> {
     where
         'slf: 'out,
     {
-        &self.my_val
+        &self.val
     }
 }
