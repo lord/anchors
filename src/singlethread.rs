@@ -9,8 +9,8 @@
 mod generation;
 mod graph2;
 
-#[cfg(test)]
-mod test;
+// #[cfg(test)]
+// mod test;
 
 use graph2::{Graph2, Graph2Guard, NodeGuard, NodeKey, RecalcState};
 
@@ -31,8 +31,6 @@ pub type VarSetter<T> = crate::expert::VarSetter<T, DirtyHandle>;
 
 /// An Anchor for immutable values.
 pub type Constant<T> = crate::expert::Constant<T>;
-
-pub use crate::expert::{AnchorExt, AnchorSplit};
 
 use crate::expert::{AnchorInner, OutputContext, Poll, UpdateContext};
 

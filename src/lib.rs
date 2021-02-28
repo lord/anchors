@@ -1,5 +1,5 @@
 #![feature(negative_impls)]
+#![feature(generic_associated_types)]
 
-pub mod dict;
 pub mod expert;
 pub mod singlethread;
