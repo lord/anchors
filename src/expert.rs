@@ -12,7 +12,7 @@ pub use ext::{AnchorExt, AnchorSplit};
 mod constant;
 mod var;
 pub use constant::Constant;
-pub use var::{Var, VarSetter};
+pub use var::Var;
 
 /// Indicates whether a value is ready for reading, and if it is, whether it's changed
 /// since the last read.

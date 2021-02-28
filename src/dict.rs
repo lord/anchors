@@ -80,8 +80,8 @@ mod test {
     fn test_filter() {
         let mut engine = crate::singlethread::Engine::new();
         let mut dict = Dict::new();
-        let (a, a_setter) = crate::expert::Var::new(dict.clone());
-        let b = a.filter(|_, n| *n > 10);
+        let a = crate::expert::Var::new(dict.clone());
+        let b = a.watch().filter(|_, n| *n > 10);
         let b_out = engine.get(&b);
         assert_eq!(0, b_out.len());
 
@@ -89,7 +89,7 @@ mod test {
         dict.insert("b".to_string(), 23);
         dict.insert("c".to_string(), 5);
         dict.insert("d".to_string(), 24);
-        a_setter.set(dict.clone());
+        a.set(dict.clone());
         let b_out = engine.get(&b);
         assert_eq!(2, b_out.len());
         assert_eq!(Some(&23), b_out.get("b"));
@@ -99,7 +99,7 @@ mod test {
         dict.insert("b".to_string(), 5);
         dict.remove("d");
         dict.insert("e".to_string(), 50);
-        a_setter.set(dict.clone());
+        a.set(dict.clone());
         let b_out = engine.get(&b);
         assert_eq!(2, b_out.len());
         assert_eq!(Some(&25), b_out.get("a"));
@@ -110,8 +110,8 @@ mod test {
     fn test_map() {
         let mut engine = crate::singlethread::Engine::new();
         let mut dict = Dict::new();
-        let (a, a_setter) = crate::expert::Var::new(dict.clone());
-        let b = a.map(|_, n| *n + 1);
+        let a = crate::expert::Var::new(dict.clone());
+        let b = a.watch().map(|_, n| *n + 1);
         let b_out = engine.get(&b);
         assert_eq!(0, b_out.len());
 
@@ -119,7 +119,7 @@ mod test {
         dict.insert("b".to_string(), 2);
         dict.insert("c".to_string(), 3);
         dict.insert("d".to_string(), 4);
-        a_setter.set(dict.clone());
+        a.set(dict.clone());
         let b_out = engine.get(&b);
         assert_eq!(4, b_out.len());
         assert_eq!(Some(&2), b_out.get("a"));
@@ -131,7 +131,7 @@ mod test {
         dict.insert("b".to_string(), 11);
         dict.remove("d");
         dict.insert("e".to_string(), 12);
-        a_setter.set(dict.clone());
+        a.set(dict.clone());
         let b_out = engine.get(&b);
         assert_eq!(4, b_out.len());
         assert_eq!(Some(&11), b_out.get("a"));

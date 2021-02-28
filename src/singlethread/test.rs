@@ -2,7 +2,10 @@ use crate::expert::{AnchorExt, AnchorSplit};
 #[test]
 fn test_cutoff_simple_observed() {
     let mut engine = crate::singlethread::Engine::new();
-    let (v, v_setter) = crate::expert::Var::new(100i32);
+    let (v, v_setter) = {
+        let var = crate::expert::Var::new(100i32);
+        (var.watch(), var)
+    };
     let mut old_val = 0i32;
     let post_cutoff = v
         .cutoff(move |new_val| {
@@ -27,7 +30,10 @@ fn test_cutoff_simple_observed() {
 #[test]
 fn test_cutoff_simple_unobserved() {
     let mut engine = crate::singlethread::Engine::new();
-    let (v, v_setter) = crate::expert::Var::new(100i32);
+    let (v, v_setter) = {
+        let var = crate::expert::Var::new(100i32);
+        (var.watch(), var)
+    };
     let mut old_val = 0i32;
     let post_cutoff = v
         .cutoff(move |new_val| {
@@ -54,7 +60,10 @@ fn test_refmap_simple() {
     struct NoClone(usize);
 
     let mut engine = crate::singlethread::Engine::new();
-    let (v, _) = crate::expert::Var::new((NoClone(1), NoClone(2)));
+    let (v, _) = {
+        let var = crate::expert::Var::new((NoClone(1), NoClone(2)));
+        (var.watch(), var)
+    };
     let a = v.refmap(|(a, _)| a);
     let b = v.refmap(|(_, b)| b);
     let a_correct = a.map(|a| a == &NoClone(1));
@@ -66,7 +75,10 @@ fn test_refmap_simple() {
 #[test]
 fn test_split_simple() {
     let mut engine = crate::singlethread::Engine::new();
-    let (v, _) = crate::expert::Var::new((1usize, 2usize, 3usize));
+    let (v, _) = {
+        let var = crate::expert::Var::new((1usize, 2usize, 3usize));
+        (var.watch(), var)
+    };
     let (a, b, c) = v.split();
     assert_eq!(engine.get(&a), 1);
     assert_eq!(engine.get(&b), 2);
@@ -76,8 +88,14 @@ fn test_split_simple() {
 #[test]
 fn test_map_simple() {
     let mut engine = crate::singlethread::Engine::new();
-    let (v1, _v1_setter) = crate::expert::Var::new(1usize);
-    let (v2, _v2_setter) = crate::expert::Var::new(123usize);
+    let (v1, _v1_setter) = {
+        let var = crate::expert::Var::new(1usize);
+        (var.watch(), var)
+    };
+    let (v2, _v2_setter) = {
+        let var = crate::expert::Var::new(123usize);
+        (var.watch(), var)
+    };
     let _a2 = v1.map(|num1| {
         println!("a: adding to {:?}", num1);
         *num1
@@ -93,9 +111,18 @@ fn test_map_simple() {
 #[test]
 fn test_then_simple() {
     let mut engine = crate::singlethread::Engine::new();
-    let (v1, v1_setter) = crate::expert::Var::new(true);
-    let (v2, _v2_setter) = crate::expert::Var::new(10usize);
-    let (v3, _v3_setter) = crate::expert::Var::new(20usize);
+    let (v1, v1_setter) = {
+        let var = crate::expert::Var::new(true);
+        (var.watch(), var)
+    };
+    let (v2, _v2_setter) = {
+        let var = crate::expert::Var::new(10usize);
+        (var.watch(), var)
+    };
+    let (v3, _v3_setter) = {
+        let var = crate::expert::Var::new(20usize);
+        (var.watch(), var)
+    };
     let a = v1.then(move |val| if *val { v2.clone() } else { v3.clone() });
     engine.mark_observed(&a);
     engine.stabilize();
@@ -111,7 +138,10 @@ fn test_observed_marking() {
     use crate::singlethread::ObservedState;
 
     let mut engine = crate::singlethread::Engine::new();
-    let (v1, _v1_setter) = crate::expert::Var::new(1usize);
+    let (v1, _v1_setter) = {
+        let var = crate::expert::Var::new(1usize);
+        (var.watch(), var)
+    };
     let a = v1.map(|num1| *num1 + 1);
     let b = a.map(|num1| *num1 + 2);
     let c = b.map(|num1| *num1 + 3);
@@ -148,7 +178,10 @@ fn test_observed_marking() {
 #[test]
 fn test_garbage_collection_wont_panic() {
     let mut engine = crate::singlethread::Engine::new();
-    let (v1, _v1_setter) = crate::expert::Var::new(1usize);
+    let (v1, _v1_setter) = {
+        let var = crate::expert::Var::new(1usize);
+        (var.watch(), var)
+    };
     engine.get(&v1);
     std::mem::drop(v1);
     engine.stabilize();
@@ -161,8 +194,14 @@ fn test_readme_example() {
     let mut engine = Engine::new();
 
     // create a couple `Var`s
-    let (my_name, my_name_updater) = Var::new("Bob".to_string());
-    let (my_unread, my_unread_updater) = Var::new(999usize);
+    let (my_name, my_name_updater) = {
+        let var = Var::new("Bob".to_string());
+        (var.watch(), var)
+    };
+    let (my_unread, my_unread_updater) = {
+        let var = Var::new(999usize);
+        (var.watch(), var)
+    };
 
     // `my_name` is a `Var`, our first type of `Anchor`. we can pull an `Anchor`'s value out with our `engine`:
     assert_eq!(&engine.get(&my_name), "Bob");
@@ -190,7 +229,10 @@ fn test_readme_example() {
     );
 
     // just like a future, you can dynamically decide which `Anchor` to use with `then`:
-    let (insulting_name, _) = Var::new("Lazybum".to_string());
+    let (insulting_name, _) = {
+        let var = Var::new("Lazybum".to_string());
+        (var.watch(), var)
+    };
     let dynamic_name = my_unread.then(move |unread| {
         // only use the user's real name if the have less than 100 messages in their inbox
         if *unread < 100 {

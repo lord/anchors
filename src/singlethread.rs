@@ -23,11 +23,8 @@ pub use graph2::NodeKey as AnchorToken;
 /// to create them.
 pub type Anchor<T> = crate::expert::Anchor<T, Engine>;
 
-/// An Anchor type for values that are mutated by calling a setter function from outside of the Anchors recomputation graph.
+/// An Anchor input that can be mutated by calling a setter function from outside of the Anchors recomputation graph.
 pub type Var<T> = crate::expert::Var<T, DirtyHandle>;
-
-/// A setter that can update values inside an associated `Var`.
-pub type VarSetter<T> = crate::expert::VarSetter<T, DirtyHandle>;
 
 /// An Anchor for immutable values.
 pub type Constant<T> = crate::expert::Constant<T>;

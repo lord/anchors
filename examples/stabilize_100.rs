@@ -1,4 +1,4 @@
-use anchors::expert::{Anchor, AnchorExt, Var, VarSetter};
+use anchors::expert::{Anchor, AnchorExt, Var};
 use anchors::singlethread::Engine;
 
 const NODE_COUNT: u64 = 100;
@@ -7,8 +7,8 @@ const OBSERVED: bool = true;
 
 fn main() {
     let mut engine = Engine::new_with_max_height(128);
-    let (first_num, set_first_num) = Var::new(0u64);
-    let mut node = first_num;
+    let first_num = Var::new(0u64);
+    let mut node = first_num.watch();
     for _ in 0..NODE_COUNT {
         node = node.map(|val| val + 1);
     }
@@ -16,15 +16,11 @@ fn main() {
         engine.mark_observed(&node);
     }
     assert_eq!(engine.get(&node), NODE_COUNT);
-    iter(node, engine, set_first_num);
+    iter(node, engine, first_num);
 }
 
 #[inline(never)]
-fn iter(
-    node: Anchor<u64, Engine>,
-    mut engine: Engine,
-    set_first_num: VarSetter<u64, <Engine as anchors::expert::Engine>::DirtyHandle>,
-) {
+fn iter(node: Anchor<u64, Engine>, mut engine: Engine, set_first_num: Var<u64, Engine>) {
     let mut update_number = 0;
     for i in 0..ITER_COUNT {
         if i % (ITER_COUNT / 100) == 0 {

@@ -5,46 +5,46 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 /// An Anchor type for values that are mutated by calling a setter function from outside of the Anchors recomputation graph.
-pub struct Var<T, H> {
-    inner: Rc<RefCell<VarInner<T, H>>>,
+struct VarAnchor<T, E: Engine> {
+    inner: Rc<RefCell<VarShared<T, E>>>,
     my_val: T,
 }
 
 #[derive(Clone)]
-struct VarInner<T, H> {
-    dirty_handle: Option<H>,
+struct VarShared<T, E: Engine> {
+    dirty_handle: Option<E::DirtyHandle>,
     val: Option<T>,
 }
 
-/// A setter that can update values inside an associated `Var`.
-pub struct VarSetter<T, H> {
-    inner: Rc<RefCell<VarInner<T, H>>>,
+/// A setter that can update values inside an associated `VarAnchor`.
+pub struct Var<T, E: Engine> {
+    inner: Rc<RefCell<VarShared<T, E>>>,
+    anchor: Anchor<T, E>,
 }
 
-impl<T, H> Clone for VarSetter<T, H> {
+impl<T, E: Engine> Clone for Var<T, E> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
+            anchor: self.anchor.clone(),
         }
     }
 }
 
-impl<T: 'static, H: DirtyHandle + 'static> Var<T, H> {
-    /// Creates a new Var Anchor, returning a tuple of the new Anchor and its setter.
-    pub fn new<E: Engine<DirtyHandle = H>>(val: T) -> (Anchor<T, E>, VarSetter<T, H>) {
-        let inner = Rc::new(RefCell::new(VarInner {
+impl<T: 'static, E: Engine> Var<T, E> {
+    /// Creates a new Var
+    pub fn new(val: T) -> Var<T, E> {
+        let inner = Rc::new(RefCell::new(VarShared {
             dirty_handle: None,
             val: None,
         }));
-        let setter = VarSetter {
+        Var {
             inner: inner.clone(),
-        };
-        let this = Self { inner, my_val: val };
-        (E::mount(this), setter)
+            anchor: E::mount(VarAnchor { inner, my_val: val }),
+        }
     }
-}
-impl<T: 'static, H: DirtyHandle> VarSetter<T, H> {
-    /// Updates the value inside the Var, and indicates to the recomputation graph that
+
+    /// Updates the value inside the VarAnchor, and indicates to the recomputation graph that
     /// the value has changed.
     pub fn set(&self, val: T) {
         let mut inner = self.inner.borrow_mut();
@@ -53,12 +53,16 @@ impl<T: 'static, H: DirtyHandle> VarSetter<T, H> {
             waker.mark_dirty();
         }
     }
+
+    pub fn watch(&self) -> Anchor<T, E> {
+        self.anchor.clone()
+    }
 }
 
-impl<E: Engine, T: 'static> AnchorInner<E> for Var<T, E::DirtyHandle> {
+impl<E: Engine, T: 'static> AnchorInner<E> for VarAnchor<T, E> {
     type Output = T;
     fn dirty(&mut self, _edge: &<E::AnchorHandle as AnchorHandle>::Token) {
-        panic!("somehow an input was dirtied on var; it never has any inputs to dirty")
+        panic!("somehow an input was dirtied on VarAnchor; it never has any inputs to dirty")
     }
 
     fn poll_updated<G: UpdateContext<Engine = E>>(&mut self, ctx: &mut G) -> Poll {
