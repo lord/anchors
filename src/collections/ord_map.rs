@@ -18,6 +18,7 @@ impl<E: Engine, K: Ord + Clone + PartialEq + 'static, V: Clone + PartialEq + 'st
         self.filter_map(move |k, v| Some(f(k, v)))
     }
 
+    /// FOOBAR
     pub fn filter_map<F: FnMut(&K, &V) -> Option<T> + 'static, T: Clone + PartialEq + 'static>(
         &self,
         mut f: F,
