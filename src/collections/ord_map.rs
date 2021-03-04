@@ -11,7 +11,8 @@ impl<E: Engine, K: Ord + Clone + PartialEq + 'static, V: Clone + PartialEq + 'st
         self.filter_map(move |k, v| if f(k, v) { Some(v.clone()) } else { None })
     }
 
-    pub fn map<F: FnMut(&K, &V) -> T + 'static, T: Clone + PartialEq + 'static>(
+    // TODO rlord: fix this name god
+    pub fn map_<F: FnMut(&K, &V) -> T + 'static, T: Clone + PartialEq + 'static>(
         &self,
         mut f: F,
     ) -> Anchor<Dict<K, T>, E> {
@@ -112,7 +113,7 @@ mod test {
         let mut engine = crate::singlethread::Engine::new();
         let mut dict = Dict::new();
         let a = crate::expert::Var::new(dict.clone());
-        let b = a.watch().map(|_, n| *n + 1);
+        let b = a.watch().map_(|_, n| *n + 1);
         let b_out = engine.get(&b);
         assert_eq!(0, b_out.len());
 
