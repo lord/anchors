@@ -19,7 +19,7 @@ pub use graph2::NodeKey as AnchorToken;
 
 /// The main struct of the Anchors library. Represents a single value on the singlthread recomputation graph.
 ///
-/// You should basically never need to create these with `Anchor::new`; instead call functions like `Var::new` and `AnchorExt::map`
+/// You should basically never need to create these with `Anchor::new_from_expert`; instead call functions like `Var::new` and `AnchorExt::map`
 /// to create them.
 pub type Anchor<T> = crate::expert::Anchor<T, Engine>;
 
@@ -87,7 +87,7 @@ impl crate::expert::Engine for Engine {
                 .expect("no engine was initialized. did you call `Engine::new()`?");
             let debug_info = inner.debug_info();
             let handle = this.graph.insert(Box::new(inner), debug_info);
-            Anchor::new(handle)
+            Anchor::new_from_expert(handle)
         })
     }
 }

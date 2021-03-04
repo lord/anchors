@@ -44,16 +44,21 @@ pub struct Anchor<O, E: Engine + ?Sized> {
 }
 
 impl<O, E: Engine> Anchor<O, E> {
-    pub fn new(data: E::AnchorHandle) -> Self {
-        Self {
-            data,
-            phantom: PhantomData,
-        }
+    #[track_caller]
+    pub fn constant(val: O) -> Self where O: 'static {
+        Constant::new_internal(val)
     }
 
     /// Returns the immutable, copyable, hashable, comparable engine-specific ID for this Anchor.
     pub fn token(&self) -> <E::AnchorHandle as AnchorHandle>::Token {
         self.data.token()
+    }
+
+    pub fn new_from_expert(data: E::AnchorHandle) -> Self {
+        Self {
+            data,
+            phantom: PhantomData,
+        }
     }
 }
 
