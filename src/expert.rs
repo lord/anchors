@@ -45,7 +45,10 @@ pub struct Anchor<O, E: Engine + ?Sized> {
 
 impl<O, E: Engine> Anchor<O, E> {
     #[track_caller]
-    pub fn constant(val: O) -> Self where O: 'static {
+    pub fn constant(val: O) -> Self
+    where
+        O: 'static,
+    {
         Constant::new_internal(val)
     }
     /// Returns the immutable, copyable, hashable, comparable engine-specific ID for this Anchor.
@@ -96,8 +99,6 @@ pub trait Engine: 'static {
     type DirtyHandle: DirtyHandle;
 
     fn mount<I: AnchorInner<Self> + 'static>(inner: I) -> Anchor<I::Output, Self>;
-    fn debug_node(token: <Self::AnchorHandle as AnchorHandle>::Token) -> String;
-    fn debug_state() -> String;
 }
 
 /// Allows a node with non-Anchors inputs to manually mark itself as dirty. Each engine implements its own.
