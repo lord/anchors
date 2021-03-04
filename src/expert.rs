@@ -8,7 +8,7 @@ use std::marker::PhantomData;
 use std::panic::Location;
 
 mod ext;
-pub use ext::{AnchorExt, AnchorSplit};
+pub use ext::AnchorExt;
 mod constant;
 mod var;
 pub use constant::Constant;

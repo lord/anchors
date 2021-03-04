@@ -29,7 +29,7 @@ pub type Var<T> = crate::expert::Var<T, Engine>;
 /// An Anchor for immutable values.
 pub type Constant<T> = crate::expert::Constant<T>;
 
-pub use crate::expert::{AnchorExt, AnchorSplit};
+pub use crate::expert::AnchorExt;
 
 use crate::expert::{AnchorInner, OutputContext, Poll, UpdateContext};
 

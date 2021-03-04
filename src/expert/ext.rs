@@ -175,11 +175,6 @@ pub trait AnchorExt<E: Engine>: Sized {
         refmap::RefMap<Self::Target, F>: AnchorInner<E, Output = Out>;
 }
 
-pub trait AnchorSplit<E: Engine>: Sized {
-    type Target;
-    fn split(&self) -> Self::Target;
-}
-
 impl<O1, E> Anchor<O1, E>
 where
     O1: 'static,

@@ -1,4 +1,4 @@
-use crate::expert::{AnchorExt, AnchorSplit};
+use crate::expert::AnchorExt;
 #[test]
 fn test_cutoff_simple_observed() {
     let mut engine = crate::singlethread::Engine::new();
