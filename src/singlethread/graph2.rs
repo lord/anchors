@@ -31,7 +31,7 @@ thread_local! {
 
 pub struct Graph2 {
     nodes: ag::Graph<Node>,
-    token: u32,
+    graph_token: u32,
 
     still_alive: Rc<Cell<bool>>,
 
@@ -280,7 +280,7 @@ impl<'a> Drop for RefCellVecIterator<'a> {
 
 impl<'gg> Graph2Guard<'gg> {
     pub fn get(&self, key: NodeKey) -> Option<NodeGuard<'gg>> {
-        if key.token != self.graph.token {
+        if key.token != self.graph.graph_token {
             return None;
         }
         Some(NodeGuard(unsafe { self.nodes.lookup_ptr(key.ptr) }))
@@ -353,7 +353,7 @@ impl Graph2 {
     pub fn new(max_height: usize) -> Self {
         Self {
             nodes: ag::Graph::new(),
-            token: NEXT_TOKEN.with(|token| {
+            graph_token: NEXT_TOKEN.with(|token| {
                 let n = token.get();
                 token.set(n + 1);
                 n
@@ -416,7 +416,7 @@ impl Graph2 {
                     observed: Cell::new(false),
                     visited: Cell::new(false),
                     necessary_count: Cell::new(0),
-                    token: self.token,
+                    token: self.graph_token,
                     ptrs: NodePtrs {
                         clean_parent0: Cell::new(None),
                         clean_parents: RefCell::new(vec![]),
@@ -437,7 +437,7 @@ impl Graph2 {
             };
             let num = NodeKey {
                 ptr: unsafe { ptr.make_ptr() },
-                token: self.token,
+                token: self.graph_token,
             };
             AnchorHandle {
                 num,

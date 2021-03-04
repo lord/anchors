@@ -48,7 +48,6 @@ impl<O, E: Engine> Anchor<O, E> {
     pub fn constant(val: O) -> Self where O: 'static {
         Constant::new_internal(val)
     }
-
     /// Returns the immutable, copyable, hashable, comparable engine-specific ID for this Anchor.
     pub fn token(&self) -> <E::AnchorHandle as AnchorHandle>::Token {
         self.data.token()
@@ -80,7 +79,7 @@ impl<O, E: Engine> Eq for Anchor<O, E> {}
 
 /// A reference to a particular `AnchorInner`. Each engine implements its own.
 pub trait AnchorHandle: Sized + Clone {
-    type Token: Sized + Clone + Copy + PartialEq + Eq + std::hash::Hash;
+    type Token: Sized + Clone + Copy + PartialEq + Eq + std::hash::Hash + std::fmt::Debug;
 
     /// Returns a Copyable, comparable, hashable ID corresponding to this AnchorHandle.
     /// Some engines may garbage collect an AnchorInner when no more AnchorHandles pointing
@@ -97,6 +96,8 @@ pub trait Engine: 'static {
     type DirtyHandle: DirtyHandle;
 
     fn mount<I: AnchorInner<Self> + 'static>(inner: I) -> Anchor<I::Output, Self>;
+    fn debug_node(token: <Self::AnchorHandle as AnchorHandle>::Token) -> String;
+    fn debug_state() -> String;
 }
 
 /// Allows a node with non-Anchors inputs to manually mark itself as dirty. Each engine implements its own.
