@@ -8,8 +8,8 @@ use std::marker::PhantomData;
 use std::panic::Location;
 
 mod ext;
-pub use ext::AnchorExt;
-mod constant;
+pub use ext::MultiAnchor;
+pub(crate) mod constant;
 mod var;
 pub use constant::Constant;
 pub use var::Var;
@@ -32,12 +32,6 @@ pub enum Poll {
 }
 
 /// The main struct of the Anchors library. Represents a single value on the recomputation graph.
-///
-/// This doesn't contain the particular Anchor implementation directly, but instead contains an
-/// engine-specific `AnchorHandle` which allows the recalculation engine to identify which
-/// internal recomputation graph node this corresponds to. You should rarely create Anchors yourself;
-/// instead use one of the built-in functions like `Var::new` to create one, or create derivative Anchors
-/// with one of the `AnchorExt` methods.
 pub struct Anchor<O, E: Engine + ?Sized> {
     data: E::AnchorHandle,
     phantom: PhantomData<O>,

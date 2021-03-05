@@ -19,17 +19,14 @@ pub use graph2::NodeKey as AnchorToken;
 
 /// The main struct of the Anchors library. Represents a single value on the singlthread recomputation graph.
 ///
-/// You should basically never need to create these with `Anchor::new_from_expert`; instead call functions like `Var::new` and `AnchorExt::map`
+/// You should basically never need to create these with `Anchor::new_from_expert`; instead call functions like `Var::new` and `MultiAnchor::map`
 /// to create them.
 pub type Anchor<T> = crate::expert::Anchor<T, Engine>;
 
 /// An Anchor input that can be mutated by calling a setter function from outside of the Anchors recomputation graph.
 pub type Var<T> = crate::expert::Var<T, Engine>;
 
-/// An Anchor for immutable values.
-pub type Constant<T> = crate::expert::Constant<T>;
-
-pub use crate::expert::AnchorExt;
+pub use crate::expert::MultiAnchor;
 
 use crate::expert::{AnchorInner, OutputContext, Poll, UpdateContext};
 

@@ -39,7 +39,10 @@ impl<T: 'static> Constant<T> {
 impl<T: 'static, E: Engine> AnchorInner<E> for Constant<T> {
     type Output = T;
     fn dirty(&mut self, child: &<E::AnchorHandle as AnchorHandle>::Token) {
-        panic!("Constant never has any inputs; dirty should not have been called. alleged child: {:?}", child)
+        panic!(
+            "Constant never has any inputs; dirty should not have been called. alleged child: {:?}",
+            child
+        )
     }
     fn poll_updated<G: UpdateContext<Engine = E>>(&mut self, _ctx: &mut G) -> Poll {
         let res = if self.first_poll {

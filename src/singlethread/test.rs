@@ -1,4 +1,4 @@
-use crate::expert::AnchorExt;
+use crate::expert::MultiAnchor;
 #[test]
 fn test_cutoff_simple_observed() {
     let mut engine = crate::singlethread::Engine::new();
@@ -100,9 +100,9 @@ fn test_map_simple() {
         println!("a: adding to {:?}", num1);
         *num1
     });
-    let a = AnchorExt::map((&v1, &v2), |num1, num2| num1 + num2);
+    let a = MultiAnchor::map((&v1, &v2), |num1, num2| num1 + num2);
 
-    let b = AnchorExt::map((&v1, &a, &v2), |num1, num2, num3| num1 + num2 + num3);
+    let b = MultiAnchor::map((&v1, &a, &v2), |num1, num2, num3| num1 + num2 + num3);
     engine.mark_observed(&b);
     engine.stabilize();
     assert_eq!(engine.get(&b), 248);
@@ -190,7 +190,7 @@ fn test_garbage_collection_wont_panic() {
 #[test]
 fn test_readme_example() {
     // example
-    use crate::singlethread::{AnchorExt, Engine, Var};
+    use crate::singlethread::{Engine, MultiAnchor, Var};
     let mut engine = Engine::new();
 
     // create a couple `Var`s

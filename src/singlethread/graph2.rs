@@ -374,7 +374,7 @@ impl Graph2 {
     #[cfg(test)]
     pub fn insert_testing<'a>(&'a self) -> AnchorHandle {
         self.insert(
-            Box::new(crate::expert::Constant::new_raw_testing(123)),
+            Box::new(crate::expert::constant::Constant::new_raw_testing(123)),
             AnchorDebugInfo {
                 location: None,
                 type_info: "testing dummy anchor",

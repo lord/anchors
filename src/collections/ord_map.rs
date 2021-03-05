@@ -1,4 +1,4 @@
-use crate::expert::{Anchor, AnchorExt, Engine};
+use crate::expert::{Anchor, Engine, MultiAnchor};
 use im::ordmap::DiffItem;
 use im::OrdMap;
 
