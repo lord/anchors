@@ -7,13 +7,6 @@
 use std::marker::PhantomData;
 use std::panic::Location;
 
-mod ext;
-pub use ext::MultiAnchor;
-pub(crate) mod constant;
-mod var;
-pub use constant::Constant;
-pub use var::Var;
-
 /// Indicates whether a value is ready for reading, and if it is, whether it's changed
 /// since the last read.
 #[derive(Debug, PartialEq, Eq)]
@@ -181,3 +174,10 @@ pub trait AnchorInner<E: Engine + ?Sized> {
         None
     }
 }
+
+mod ext;
+pub use ext::MultiAnchor;
+pub(crate) mod constant;
+mod var;
+pub use constant::Constant;
+pub use var::Var;
