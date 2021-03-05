@@ -13,13 +13,18 @@
 ## Example
 
 ```rust
-// example
-use crate::{singlethread::Engine, AnchorExt, Var};
+use crate::singlethread::{AnchorExt, Engine, Var};
 let mut engine = Engine::new();
 
 // create a couple `Var`s
-let (my_name, my_name_updater) = Var::new("Bob".to_string());
-let (my_unread, my_unread_updater) = Var::new(999usize);
+let (my_name, my_name_updater) = {
+    let var = Var::new("Bob".to_string());
+    (var.watch(), var)
+};
+let (my_unread, my_unread_updater) = {
+    let var = Var::new(999usize);
+    (var.watch(), var)
+};
 
 // `my_name` is a `Var`, our first type of `Anchor`. we can pull an `Anchor`'s value out with our `engine`:
 assert_eq!(&engine.get(&my_name), "Bob");
@@ -47,7 +52,10 @@ assert_eq!(
 );
 
 // just like a future, you can dynamically decide which `Anchor` to use with `then`:
-let (insulting_name, _) = Var::new("Lazybum".to_string());
+let (insulting_name, _) = {
+    let var = Var::new("Lazybum".to_string());
+    (var.watch(), var)
+};
 let dynamic_name = my_unread.then(move |unread| {
     // only use the user's real name if the have less than 100 messages in their inbox
     if *unread < 100 {
