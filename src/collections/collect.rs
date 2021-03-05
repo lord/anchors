@@ -1,18 +1,26 @@
 use std::panic::Location;
 use crate::expert::{Engine, AnchorInner, UpdateContext, AnchorHandle, OutputContext, Anchor, Poll};
 
-struct VecCollect<T, E: Engine> {
-    anchors: Vec<Anchor<T, E>>,
-    vals: Option<Vec<T>>,
-    location: &'static Location<'static>,
-}
-
 impl <I: 'static + Clone, E: Engine> std::iter::FromIterator<Anchor<I, E>> for Anchor<Vec<I>, E> {
     fn from_iter<T>(iter: T) -> Self
         where
             T: IntoIterator<Item = Anchor<I, E>> {
         VecCollect::new(iter.into_iter().collect())
     }
+}
+
+impl <'a, I: 'static + Clone, E: Engine> std::iter::FromIterator<&'a Anchor<I, E>> for Anchor<Vec<I>, E> {
+    fn from_iter<T>(iter: T) -> Self
+        where
+            T: IntoIterator<Item = &'a Anchor<I, E>> {
+        VecCollect::new(iter.into_iter().cloned().collect())
+    }
+}
+
+struct VecCollect<T, E: Engine> {
+    anchors: Vec<Anchor<T, E>>,
+    vals: Option<Vec<T>>,
+    location: &'static Location<'static>,
 }
 
 impl<T: 'static + Clone, E: Engine> VecCollect<T, E> {
