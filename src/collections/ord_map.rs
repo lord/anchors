@@ -7,11 +7,15 @@ pub type Dict<K, V> = OrdMap<K, V>;
 impl<E: Engine, K: Ord + Clone + PartialEq + 'static, V: Clone + PartialEq + 'static>
     Anchor<Dict<K, V>, E>
 {
+    #[track_caller]
     pub fn filter<F: FnMut(&K, &V) -> bool + 'static>(&self, mut f: F) -> Anchor<Dict<K, V>, E> {
         self.filter_map(move |k, v| if f(k, v) { Some(v.clone()) } else { None })
     }
 
     // TODO rlord: fix this name god
+
+    #[track_caller]
+
     pub fn map_<F: FnMut(&K, &V) -> T + 'static, T: Clone + PartialEq + 'static>(
         &self,
         mut f: F,
@@ -20,6 +24,7 @@ impl<E: Engine, K: Ord + Clone + PartialEq + 'static, V: Clone + PartialEq + 'st
     }
 
     /// FOOBAR
+    #[track_caller]
     pub fn filter_map<F: FnMut(&K, &V) -> Option<T> + 'static, T: Clone + PartialEq + 'static>(
         &self,
         mut f: F,
@@ -52,7 +57,7 @@ impl<E: Engine, K: Ord + Clone + PartialEq + 'static, V: Clone + PartialEq + 'st
             false
         })
     }
-
+    #[track_caller]
     pub fn unordered_fold<
         T: PartialEq + Clone + 'static,
         F: for<'a> FnMut(&mut T, DiffItem<'a, K, V>) -> bool + 'static,

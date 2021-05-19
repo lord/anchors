@@ -1,11 +1,11 @@
 use super::{Anchor, AnchorInner, Engine};
 use std::panic::Location;
 
-mod cutoff;
-mod map;
-mod map_mut;
-mod refmap;
-mod then;
+pub mod cutoff;
+pub mod map;
+pub mod map_mut;
+pub mod refmap;
+pub mod then;
 
 /// A trait automatically implemented for tuples of Anchors.
 ///
