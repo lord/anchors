@@ -1,4 +1,4 @@
-use crate::expert::{Anchor, Engine, MultiAnchor};
+use crate::expert::{Anchor, Engine};
 use im::ordmap::DiffItem;
 use im::OrdMap;
 
@@ -7,24 +7,23 @@ pub type Dict<K, V> = OrdMap<K, V>;
 impl<E: Engine, K: Ord + Clone + PartialEq + 'static, V: Clone + PartialEq + 'static>
     Anchor<Dict<K, V>, E>
 {
-    pub fn filter<F: FnMut(&K, &V) -> bool + 'static>(&self, mut f: F) -> Anchor<Dict<K, V>, E> {
-        self.filter_map(move |k, v| if f(k, v) { Some(v.clone()) } else { None })
+    // TODO MERGE FN
+    pub fn inner_filter<F: FnMut(&K, &V) -> bool + 'static>(&self, mut f: F) -> Anchor<Dict<K, V>, E> {
+        self.inner_filter_map(move |k, v| if f(k, v) { Some(v.clone()) } else { None })
     }
 
-    // TODO rlord: fix this name god
-    pub fn map_<F: FnMut(&K, &V) -> T + 'static, T: Clone + PartialEq + 'static>(
+    pub fn inner_map<F: FnMut(&K, &V) -> T + 'static, T: Clone + PartialEq + 'static>(
         &self,
         mut f: F,
     ) -> Anchor<Dict<K, T>, E> {
-        self.filter_map(move |k, v| Some(f(k, v)))
+        self.inner_filter_map(move |k, v| Some(f(k, v)))
     }
 
-    /// FOOBAR
-    pub fn filter_map<F: FnMut(&K, &V) -> Option<T> + 'static, T: Clone + PartialEq + 'static>(
+    pub fn inner_filter_map<F: FnMut(&K, &V) -> Option<T> + 'static, T: Clone + PartialEq + 'static>(
         &self,
         mut f: F,
     ) -> Anchor<Dict<K, T>, E> {
-        self.unordered_fold(Dict::new(), move |out, diff_item| {
+        self.inner_unordered_fold(Dict::new(), move |out, diff_item| {
             match diff_item {
                 DiffItem::Add(k, v) => {
                     if let Some(new) = f(k, v) {
@@ -53,7 +52,7 @@ impl<E: Engine, K: Ord + Clone + PartialEq + 'static, V: Clone + PartialEq + 'st
         })
     }
 
-    pub fn unordered_fold<
+    pub fn inner_unordered_fold<
         T: PartialEq + Clone + 'static,
         F: for<'a> FnMut(&mut T, DiffItem<'a, K, V>) -> bool + 'static,
     >(
@@ -83,7 +82,7 @@ mod test {
         let mut engine = crate::singlethread::Engine::new();
         let mut dict = Dict::new();
         let a = crate::expert::Var::new(dict.clone());
-        let b = a.watch().filter(|_, n| *n > 10);
+        let b = a.watch().inner_filter(|_, n| *n > 10);
         let b_out = engine.get(&b);
         assert_eq!(0, b_out.len());
 
@@ -113,7 +112,7 @@ mod test {
         let mut engine = crate::singlethread::Engine::new();
         let mut dict = Dict::new();
         let a = crate::expert::Var::new(dict.clone());
-        let b = a.watch().map_(|_, n| *n + 1);
+        let b = a.watch().inner_map(|_, n| *n + 1);
         let b_out = engine.get(&b);
         assert_eq!(0, b_out.len());
 
